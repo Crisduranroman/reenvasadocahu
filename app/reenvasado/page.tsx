@@ -3,6 +3,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { 
+  Pill, ClipboardList, LogOut, Search, 
+  Beaker, ListChecks, PlayCircle, AlertCircle, SendHorizontal, BarChart3,
+  FlaskConical, User 
+} from 'lucide-react';
 
 type Medicamento = {
   codigo_sap: number;
@@ -16,422 +21,331 @@ type Medicamento = {
 
 export default function ReenvasadoPage() {
   const router = useRouter();
-
-  // Auth guard
   const [checkingAuth, setCheckingAuth] = useState(true);
-
-  // Buscador
+  const [userRol, setUserRol] = useState<string>('tecnico'); 
+  const [nombreUsuario, setNombreUsuario] = useState<string>('');
+  
+  const [tareasPendientes, setTareasPendientes] = useState<any[]>([]);
+  const [tareaActiva, setTareaActiva] = useState<any>(null);
   const [q, setQ] = useState('');
   const [medicamentos, setMedicamentos] = useState<Medicamento[]>([]);
   const [loading, setLoading] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
-
   const [seleccionado, setSeleccionado] = useState<Medicamento | null>(null);
+  
   const [metodoId, setMetodoId] = useState<number | null>(null);
-
-  // Formulario actividad
+  
   const [cantidad, setCantidad] = useState<number>(0);
   const [cantidadFinal, setCantidadFinal] = useState<number>(0);
   const [loteOriginal, setLoteOriginal] = useState('');
-  const [cadOrig, setCadOrig] = useState(''); // YYYY-MM-DD
-  const [cadReenv, setCadReenv] = useState(''); // YYYY-MM-DD
+  const [cadOrig, setCadOrig] = useState('');
+  const [cadReenv, setCadReenv] = useState('');
   const [incidencias, setIncidencias] = useState('');
 
   const queryText = useMemo(() => q.trim(), [q]);
 
-  // 1) Proteger ruta: si no hay sesión, /login
+  // --- 1. CÁLCULO DE FECHAS SEFH ---
   useEffect(() => {
-    const run = async () => {
-      const { data } = await supabase.auth.getSession();
-      if (!data.session) {
-        router.replace('/login');
-        return;
+    if (!cadOrig || !metodoId) return;
+    const hoy = new Date();
+    const original = new Date(cadOrig);
+
+    if (metodoId === 1 || metodoId === 4) {
+      setCadReenv(cadOrig);
+    } 
+    else if (metodoId === 2 || metodoId === 3) {
+      const diffTiempo = original.getTime() - hoy.getTime();
+      const diffMeses = diffTiempo / (1000 * 60 * 60 * 24 * 30.44);
+      if (diffMeses > 0) {
+        const mesesCalculados = Math.floor(diffMeses * 0.25);
+        const mesesFinales = Math.min(mesesCalculados, 6);
+        const nuevaFecha = new Date();
+        nuevaFecha.setMonth(hoy.getMonth() + mesesFinales);
+        setCadReenv(nuevaFecha.toISOString().split('T')[0]);
       }
+    }
+  }, [cadOrig, metodoId]);
+
+  const alertaCaducidad = useMemo(() => {
+    if (!cadOrig || !cadReenv) return false;
+    return new Date(cadReenv) > new Date(cadOrig);
+  }, [cadOrig, cadReenv]);
+
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return router.replace('/login');
+      
+      const { data: perfil } = await supabase
+        .from('perfiles')
+        .select('rol, nombre')
+        .eq('user_id', session.user.id)
+        .single();
+      
+      if (perfil) {
+        setUserRol(perfil.rol);
+        setNombreUsuario(perfil.nombre || 'Usuario');
+      }
+      
       setCheckingAuth(false);
+      cargarTareas();
     };
-
-    run();
-
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!session) router.replace('/login');
-    });
-
-    return () => sub.subscription.unsubscribe();
+    checkSession();
   }, [router]);
 
-  // 2) Buscar medicamentos (solo si hay sesión)
-  useEffect(() => {
-    const buscar = async () => {
-      if (checkingAuth) return;
-
-      if (queryText.length < 2) {
-        setMedicamentos([]);
-        return;
-      }
-
-      setLoading(true);
-      setErrorMsg('');
-
-      const { data, error } = await supabase
-        .from('medicamentos')
-        .select(
-          `
-          codigo_sap,
-          nombre_medicamento,
-          principio_activo,
-          medicamento_metodo (
-            metodo_id,
-            metodo_reenvasado ( tipo_reenvasado )
+  const cargarTareas = async () => {
+    const { data } = await supabase
+      .from('tareas_reenvasado')
+      .select(`
+        *, 
+        medicamentos!inner(
+          codigo_sap, 
+          nombre_medicamento, 
+          principio_activo, 
+          activo,
+          medicamento_metodo(
+            metodo_id, 
+            metodo_reenvasado(tipo_reenvasado)
           )
-        `
         )
-        .or(
-          `nombre_medicamento.ilike.%${queryText}%,principio_activo.ilike.%${queryText}%`
-        )
-        .order('nombre_medicamento', { ascending: true })
-        .limit(20);
+      `)
+      .eq('estado', 'pendiente')
+      .eq('medicamentos.activo', true) 
+      .order('creado_en', { ascending: true });
 
-      if (error) {
-        setErrorMsg(error.message);
-        setMedicamentos([]);
-      } else {
-        setMedicamentos(data ?? []);
+    const tareasProcesadas = (data || []).map((t: any) => {
+      let metodoVisual = 'Estándar'; 
+      if (t.medicamentos?.medicamento_metodo?.length > 0) {
+        const metodosOrdenados = t.medicamentos.medicamento_metodo.sort(
+          (a: any, b: any) => a.metodo_id - b.metodo_id
+        );
+        metodoVisual = metodosOrdenados[0]?.metodo_reenvasado?.tipo_reenvasado || 'Estándar';
       }
-
-      setLoading(false);
-    };
-
-    buscar();
-  }, [queryText, checkingAuth]);
-
-  const resetForm = () => {
-    setMetodoId(null);
-    setCantidad(0);
-    setCantidadFinal(0);
-    setLoteOriginal('');
-    setCadOrig('');
-    setCadReenv('');
-    setIncidencias('');
-  };
-
-  const onSelectMedicamento = (m: Medicamento) => {
-    setSeleccionado(m);
-    resetForm();
-
-    // si solo tiene 1 método, lo preseleccionamos
-    if ((m.medicamento_metodo ?? []).length === 1) {
-      setMetodoId(m.medicamento_metodo[0].metodo_id);
-    }
-  };
-
-  const guardar = async () => {
-    setErrorMsg('');
-
-    if (!seleccionado) {
-      setErrorMsg('Selecciona un medicamento.');
-      return;
-    }
-    if (!metodoId) {
-      setErrorMsg('Selecciona un método de reenvasado.');
-      return;
-    }
-    if (cantidad <= 0) {
-      setErrorMsg('La cantidad debe ser > 0.');
-      return;
-    }
-    if (cantidadFinal < 0 || cantidadFinal > cantidad) {
-      setErrorMsg('La cantidad final debe ser >= 0 y <= cantidad.');
-      return;
-    }
-    if (!loteOriginal.trim()) {
-      setErrorMsg('Indica el lote original.');
-      return;
-    }
-    if (!cadOrig || !cadReenv) {
-      setErrorMsg('Indica las caducidades.');
-      return;
-    }
-    if (cadReenv < cadOrig) {
-      setErrorMsg(
-        'La caducidad reenvasado no puede ser anterior a la original.'
-      );
-      return;
-    }
-
-    const { error } = await supabase.from('actividad_reenvasado').insert({
-      codigo_sap: seleccionado.codigo_sap,
-      metodo_id: metodoId, // ✅ guardamos el método seleccionado
-      cantidad,
-      cantidad_final: cantidadFinal,
-      lote_original: loteOriginal,
-      caducidad_original: cadOrig,
-      caducidad_reenvasado: cadReenv,
-      incidencias: incidencias || null,
+      return { ...t, metodo_visual: metodoVisual };
     });
 
-    if (error) {
-      setErrorMsg(error.message);
-      return;
+    setTareasPendientes(tareasProcesadas);
+  };
+
+  const seleccionarTarea = (tarea: any) => {
+    setTareaActiva(tarea); 
+    setSeleccionado(tarea.medicamentos);
+    setCantidad(tarea.cantidad_solicitada);
+    setLoteOriginal(''); setCantidadFinal(0); setCadOrig(''); setCadReenv(''); setIncidencias('');
+    
+    if (tarea.medicamentos.medicamento_metodo?.length > 0) {
+       const metodosOrdenados = [...tarea.medicamentos.medicamento_metodo].sort(
+          (a: any, b: any) => a.metodo_id - b.metodo_id
+       );
+       setMetodoId(metodosOrdenados[0].metodo_id);
     }
-
-    alert('✅ Actividad guardada');
-    resetForm();
   };
 
-  const salir = async () => {
-    await supabase.auth.signOut();
-    router.replace('/login');
+  useEffect(() => {
+    const buscar = async () => {
+      if (queryText.length < 2) { setMedicamentos([]); return; }
+      setLoading(true);
+      const { data } = await supabase.from('medicamentos')
+        .select(`codigo_sap, nombre_medicamento, principio_activo, medicamento_metodo (metodo_id, metodo_reenvasado ( tipo_reenvasado ))`)
+        .or(`nombre_medicamento.ilike.%${queryText}%,principio_activo.ilike.%${queryText}%`)
+        .eq('activo', true) 
+        .limit(10);
+      setMedicamentos((data as any) ?? []);
+      setLoading(false);
+    };
+    buscar();
+  }, [queryText]);
+
+  const asignarTarea = async () => {
+    if (!seleccionado || cantidad <= 0) return alert('⚠️ Indica fármaco y cantidad.');
+    const { data: { session } } = await supabase.auth.getSession();
+    const { error } = await supabase.from('tareas_reenvasado').insert({
+      codigo_sap: seleccionado.codigo_sap,
+      cantidad_solicitada: cantidad,
+      estado: 'pendiente',
+      creado_por: session?.user.id
+    });
+    if (error) return alert("Error: " + error.message);
+    alert('✅ Tarea enviada al técnico.');
+    setSeleccionado(null); setCantidad(0); setQ(''); cargarTareas();
   };
 
-  if (checkingAuth) {
-    return (
-      <main style={{ padding: '2rem', fontFamily: 'system-ui' }}>
-        Comprobando sesión…
-      </main>
-    );
-  }
+  const guardarRegistro = async () => {
+    if (cantidad <= 0) {
+        return alert("⚠️ Error: La Cantidad Inicial no puede ser 0.");
+    }
+    if (!metodoId || !loteOriginal.trim() || cantidadFinal <= 0) {
+        return alert('⚠️ Faltan datos (Lote o Cantidad Final).');
+    }
+    if (alertaCaducidad) {
+        return alert('❌ Error: La caducidad de reenvasado no puede superar la original.');
+    }
+    
+    const { data: { session } } = await supabase.auth.getSession();
+    const { error: errorInsert } = await supabase.from('actividad_reenvasado').insert({
+      codigo_sap: seleccionado!.codigo_sap,
+      metodo_id: metodoId,
+      cantidad: cantidad,
+      cantidad_final: cantidadFinal,
+      lote_original: loteOriginal.trim(),
+      caducidad_original: cadOrig,
+      caducidad_reenvasado: cadReenv,
+      incidencias: incidencias.trim() || null,
+      user_id: session?.user.id
+    });
+
+    if (errorInsert) return alert("Error: " + errorInsert.message);
+    
+    if (tareaActiva) {
+        await supabase.from('tareas_reenvasado').update({ estado: 'completada' }).eq('id', tareaActiva.id);
+    }
+    
+    alert("✅ Registro guardado correctamente.");
+    setSeleccionado(null); setTareaActiva(null); setQ(''); cargarTareas();
+  };
+
+  if (checkingAuth) return <div style={{textAlign:'center', padding: 50}}>Cargando Reenvasado...</div>;
 
   return (
-    <main style={{ padding: '2rem', fontFamily: 'system-ui', maxWidth: 900 }}>
-      <h1>Registrar reenvasado</h1>
-
-      <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-        <button
-          onClick={() => router.push('/historial')}
-          style={{
-            padding: '8px 12px',
-            borderRadius: 8,
-            border: '1px solid #ccc',
-            cursor: 'pointer',
-            background: 'white',
-          }}
-        >
-          📋 Ver historial
-        </button>
-
-        <button
-          onClick={salir}
-          style={{
-            padding: '8px 12px',
-            borderRadius: 8,
-            border: '1px solid #ccc',
-            cursor: 'pointer',
-            background: 'white',
-          }}
-        >
-          Salir
-        </button>
-      </div>
-
-      <p style={{ opacity: 0.7 }}>
-        Escribe al menos 2 caracteres para buscar un medicamento.
-      </p>
-
-      <input
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        placeholder="Buscar medicamento o principio activo…"
-        style={{
-          padding: '10px 12px',
-          width: '100%',
-          border: '1px solid #ccc',
-          borderRadius: 8,
-          marginBottom: 12,
-        }}
-      />
-
-      {loading && <p>Cargando…</p>}
-      {errorMsg && (
-        <pre style={{ color: 'crimson', whiteSpace: 'pre-wrap' }}>
-          {errorMsg}
-        </pre>
-      )}
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        {/* Lista resultados */}
-        <div>
-          <h3>Resultados</h3>
-          <ul style={{ paddingLeft: 16 }}>
-            {medicamentos.map((m) => (
-              <li key={m.codigo_sap} style={{ marginBottom: 8 }}>
-                <button
-                  onClick={() => onSelectMedicamento(m)}
-                  style={{
-                    width: '100%',
-                    textAlign: 'left',
-                    padding: 10,
-                    borderRadius: 8,
-                    border: '1px solid #ddd',
-                    background:
-                      seleccionado?.codigo_sap === m.codigo_sap
-                        ? '#f2f2f2'
-                        : 'white',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <strong>{m.nombre_medicamento}</strong>
-                  <div style={{ opacity: 0.7 }}>
-                    {m.principio_activo ?? '—'} · SAP {m.codigo_sap}
-                  </div>
-                </button>
-              </li>
-            ))}
-          </ul>
+    <main style={{ padding: '1rem', fontFamily: 'Inter, sans-serif', maxWidth: '1100px', margin: '0 auto', backgroundColor: '#f8fafc', minHeight: '100vh' }}>
+      
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', background: 'white', padding: '1rem 1.5rem', borderRadius: '15px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ background: userRol === 'farmaceutico' ? '#f59e0b' : '#0ea5e9', padding: '10px', borderRadius: '12px' }}>
+            <Pill color="white" size={26} />
+          </div>
+          <div>
+            <h1 style={{ fontSize: '1.1rem', fontWeight: 900, margin: 0, color: '#0f172a' }}>Reenvasado HUCA</h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+              <User size={12} color={userRol === 'farmaceutico' ? '#f59e0b' : '#0ea5e9'} />
+              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: userRol === 'farmaceutico' ? '#f59e0b' : '#0ea5e9', textTransform: 'uppercase' }}>
+                {userRol}: <span style={{ color: '#64748b' }}>{nombreUsuario}</span>
+              </span>
+            </div>
+          </div>
         </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => router.push('/estadisticas')} style={{ padding: '10px 15px', borderRadius: '10px', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: '0.8rem', color: '#475569' }}><BarChart3 size={18}/> Estadísticas</button>
+          <button onClick={() => router.push('/historial')} style={{ padding: '10px 15px', borderRadius: '10px', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: '0.8rem', color: '#475569' }}><ClipboardList size={18}/> Historial</button>
+          <button onClick={() => supabase.auth.signOut()} style={{ padding: '10px', borderRadius: '10px', background: '#fee2e2', color: '#ef4444', border: 'none', cursor: 'pointer' }}><LogOut size={18}/></button>
+        </div>
+      </header>
 
-        {/* Formulario */}
-        <div>
-          <h3>Actividad</h3>
-
-          {!seleccionado ? (
-            <p style={{ opacity: 0.7 }}>
-              Selecciona un medicamento a la izquierda.
-            </p>
-          ) : (
-            <>
-              <div style={{ marginBottom: 10 }}>
-                <strong>{seleccionado.nombre_medicamento}</strong>
-                <div style={{ opacity: 0.7 }}>
-                  {seleccionado.principio_activo ?? '—'} · SAP{' '}
-                  {seleccionado.codigo_sap}
-                </div>
+      <section style={{ marginBottom: '2rem' }}>
+        <h3 style={{ fontSize: '0.95rem', color: '#0369a1', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: 8, fontWeight: 800 }}>
+          <ListChecks size={20} color="#0ea5e9" /> 
+          Planificación de Reenvasado
+        </h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
+          {tareasPendientes.map(t => (
+            <div key={t.id} style={{ background: 'white', padding: '1.2rem', borderRadius: '15px', border: tareaActiva?.id === t.id ? '2px solid #0ea5e9' : '1px solid #e2e8f0', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
+              <div style={{ fontWeight: 800, fontSize: '1rem', marginBottom: 8, color: '#0f172a' }}>{t.medicamentos.nombre_medicamento}</div>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#f0f9ff', color: '#0369a1', padding: '4px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700, marginBottom: 10 }}>
+                <FlaskConical size={12} />
+                {t.metodo_visual?.toUpperCase()}
               </div>
-
-              <label>Método de reenvasado</label>
-              <select
-                value={metodoId ?? ''}
-                onChange={(e) =>
-                  setMetodoId(e.target.value ? Number(e.target.value) : null)
-                }
-                style={{
-                  width: '100%',
-                  padding: 10,
-                  borderRadius: 8,
-                  border: '1px solid #ccc',
-                  marginBottom: 12,
-                }}
-              >
-                <option value="">-- Selecciona --</option>
-                {(seleccionado.medicamento_metodo ?? []).map((rel) => (
-                  <option key={rel.metodo_id} value={rel.metodo_id}>
-                    {rel.metodo_reenvasado?.tipo_reenvasado ?? 'Método'}
-                  </option>
-                ))}
-              </select>
-
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: 12,
-                }}
-              >
-                <div>
-                  <label>Cantidad</label>
-                  <input
-                    type="number"
-                    value={cantidad}
-                    onChange={(e) => setCantidad(Number(e.target.value))}
-                    style={{
-                      width: '100%',
-                      padding: 10,
-                      borderRadius: 8,
-                      border: '1px solid #ccc',
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <label>Cantidad final</label>
-                  <input
-                    type="number"
-                    value={cantidadFinal}
-                    onChange={(e) => setCantidadFinal(Number(e.target.value))}
-                    style={{
-                      width: '100%',
-                      padding: 10,
-                      borderRadius: 8,
-                      border: '1px solid #ccc',
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <label>Lote original</label>
-                  <input
-                    value={loteOriginal}
-                    onChange={(e) => setLoteOriginal(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: 10,
-                      borderRadius: 8,
-                      border: '1px solid #ccc',
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <label>Caducidad original</label>
-                  <input
-                    type="date"
-                    value={cadOrig}
-                    onChange={(e) => setCadOrig(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: 10,
-                      borderRadius: 8,
-                      border: '1px solid #ccc',
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <label>Caducidad reenvasado</label>
-                  <input
-                    type="date"
-                    value={cadReenv}
-                    onChange={(e) => setCadReenv(e.target.value)}
-                    style={{
-                      width: '100%',
-                      padding: 10,
-                      borderRadius: 8,
-                      border: '1px solid #ccc',
-                    }}
-                  />
-                </div>
-
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label>Incidencias (opcional)</label>
-                  <input
-                    value={incidencias}
-                    onChange={(e) => setIncidencias(e.target.value)}
-                    maxLength={255}
-                    style={{
-                      width: '100%',
-                      padding: 10,
-                      borderRadius: 8,
-                      border: '1px solid #ccc',
-                    }}
-                  />
-                </div>
-              </div>
-
-              <button
-                onClick={guardar}
-                style={{
-                  marginTop: 14,
-                  padding: '10px 12px',
-                  borderRadius: 8,
-                  border: '1px solid #ccc',
-                  cursor: 'pointer',
-                  background: 'white',
-                }}
-              >
-                Guardar actividad
+              <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Solicitado: <strong>{t.cantidad_solicitada} uds.</strong></div>
+              <button onClick={() => seleccionarTarea(t)} style={{ marginTop: 12, width: '100%', padding: '10px', borderRadius: '8px', background: '#0ea5e9', color: 'white', border: 'none', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                <PlayCircle size={16}/> Cargar Orden
               </button>
-            </>
-          )}
+            </div>
+          ))}
+          {tareasPendientes.length === 0 && <div style={{ gridColumn: '1/-1', padding: '3rem', textAlign: 'center', color: '#94a3b8', border: '2px dashed #e2e8f0', borderRadius: '15px' }}>No hay tareas programadas</div>}
         </div>
+      </section>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>
+        <section>
+          <div style={{ position: 'relative', marginBottom: '1rem' }}>
+            <Search style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} size={18} />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar fármaco..." style={{ padding: '12px 12px 12px 40px', width: '100%', border: '1px solid #e2e8f0', borderRadius: '12px', outline: 'none' }} />
+          </div>
+          {medicamentos.map(m => (
+            <button 
+              key={m.codigo_sap} 
+              onClick={() => { 
+                setSeleccionado(m); 
+                setTareaActiva(null); 
+                setCantidad(0); 
+                setCantidadFinal(0);
+                setLoteOriginal('');
+              }} 
+              style={{ width: '100%', textAlign: 'left', padding: '1rem', marginBottom: 8, borderRadius: '12px', border: seleccionado?.codigo_sap === m.codigo_sap ? '2px solid #0ea5e9' : '1px solid #e2e8f0', background: 'white', cursor: 'pointer' }}
+            >
+              <div style={{ fontWeight: 700 }}>{m.nombre_medicamento}</div>
+              <div style={{ fontSize: '0.75rem', opacity: 0.6 }}>SAP: {m.codigo_sap}</div>
+            </button>
+          ))}
+        </section>
+
+        <section style={{ background: 'white', padding: '1.5rem', borderRadius: '20px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }}>
+          <h3 style={{ marginTop: 0, marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Beaker size={20} color={userRol === 'farmaceutico' ? '#f59e0b' : '#0ea5e9'} /> 
+            {tareaActiva ? 'Ejecución de Orden' : userRol === 'farmaceutico' ? 'Panel Farmacia' : 'Registro Técnico'}
+          </h3>
+          
+          {seleccionado ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ fontWeight: 800, color: '#0ea5e9', fontSize: '1.1rem' }}>{seleccionado.nombre_medicamento}</div>
+              
+              {userRol === 'farmaceutico' && !tareaActiva ? (
+                <>
+                  <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>Cantidad a solicitar</label>
+                  <input type="number" value={cantidad} onChange={(e) => setCantidad(Number(e.target.value))} style={{ padding: '12px', borderRadius: '10px', border: '2px solid #f59e0b' }} />
+                  <button onClick={asignarTarea} style={{ background: '#f59e0b', color: 'white', padding: '15px', borderRadius: '10px', border: 'none', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><SendHorizontal size={18}/> ENVIAR AL TÉCNICO</button>
+                </>
+              ) : (
+                <>
+                  <select value={metodoId ?? ''} onChange={(e) => setMetodoId(Number(e.target.value))} style={{ padding: '12px', borderRadius: '10px', border: '1px solid #cbd5e1' }}>
+                    <option value="">-- Seleccionar Método --</option>
+                    {seleccionado.medicamento_metodo.map(rel => <option key={rel.metodo_id} value={rel.metodo_id}>{rel.metodo_reenvasado?.tipo_reenvasado}</option>)}
+                  </select>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                    <div>
+                      <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748b' }}>Cad. Original</label>
+                      <input type="date" value={cadOrig} onChange={(e) => setCadOrig(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid #cbd5e1' }} />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#0ea5e9' }}>Cad. Final (Auto)</label>
+                      <input type="date" value={cadReenv} onChange={(e) => setCadReenv(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '10px', border: alertaCaducidad ? '2px solid #ef4444' : '2px solid #0ea5e9', background: '#f0f9ff' }} />
+                    </div>
+                  </div>
+                  {alertaCaducidad && <div style={{ color: '#ef4444', fontSize: '0.75rem', fontWeight: 700, display: 'flex', gap: 4 }}><AlertCircle size={14}/> Error: Mayor a la original</div>}
+                  
+                  <input placeholder="Lote Original" value={loteOriginal} onChange={(e) => setLoteOriginal(e.target.value)} style={{ padding: '12px', borderRadius: '10px', border: '1px solid #cbd5e1' }} />
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', alignItems: 'end' }}>
+                     <div>
+                        <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#64748b', display: 'block', marginBottom: 4 }}>Cant. Inicial (Origen)</label>
+                        <input type="number" placeholder="0" value={cantidad} onChange={(e) => setCantidad(Number(e.target.value))} style={{ width: '100%', padding: '10px', borderRadius: '10px', border: '1px solid #cbd5e1' }} />
+                     </div>
+                     <div>
+                        <label style={{ fontSize: '0.7rem', fontWeight: 600, color: '#0ea5e9', display: 'block', marginBottom: 4 }}>Cant. Final (Obtenida)</label>
+                        <input type="number" placeholder="0" value={cantidadFinal} onChange={(e) => setCantidadFinal(Number(e.target.value))} style={{ width: '100%', padding: '10px', borderRadius: '10px', border: '2px solid #0ea5e9', background: '#f0f9ff' }} />
+                     </div>
+                  </div>
+                  
+                  <textarea 
+                    placeholder="MARCA COMERCIAL, CÓDIGO NACIONAL Y OBSERVACIONES" 
+                    value={incidencias} 
+                    onChange={(e) => setIncidencias(e.target.value)} 
+                    style={{ 
+                      padding: '12px', 
+                      borderRadius: '10px', 
+                      border: '1px solid #cbd5e1', 
+                      resize: 'none', 
+                      fontFamily: 'inherit',
+                      minHeight: '100px'
+                    }} 
+                    rows={3} 
+                  />
+                  
+                  <button onClick={guardarRegistro} style={{ background: '#0ea5e9', color: 'white', padding: '15px', borderRadius: '10px', border: 'none', fontWeight: 700, cursor: 'pointer' }}>CONFIRMAR REGISTRO</button>
+                </>
+              )}
+            </div>
+          ) : <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>Busca un fármaco o carga una orden de la cola</div>}
+        </section>
       </div>
     </main>
   );

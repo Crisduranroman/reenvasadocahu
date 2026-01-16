@@ -1,534 +1,157 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabaseClient';
+import { Shield, LayoutDashboard, Loader2, LogOut, ArrowRight, Package } from 'lucide-react';
 
-type Medicamento = {
-  codigo_sap: number;
-  nombre_medicamento: string;
-  principio_activo: string | null;
-  medicamento_metodo: {
-    metodo_id: number;
-    metodo_reenvasado: {
-      tipo_reenvasado: string;
-    } | null;
-  }[];
-};
-
-const PAGE_SIZE = 50;
-
-export default function Home() {
-  const [seleccionadoSap, setSeleccionadoSap] = useState<number | null>(null);
-  const [metodoId, setMetodoId] = useState<number | null>(null);
-
-  const [cantidad, setCantidad] = useState<number>(0);
-  const [cantidadFinal, setCantidadFinal] = useState<number>(0);
-
-  const [loteOriginal, setLoteOriginal] = useState('');
-  const [cadOriginal, setCadOriginal] = useState('');
-  const [cadReenv, setCadReenv] = useState('');
-
-  const [incidencias, setIncidencias] = useState('');
-  const [guardando, setGuardando] = useState(false);
-  const [okMsg, setOkMsg] = useState('');
-
-  const [medicamentos, setMedicamentos] = useState<Medicamento[]>([]);
+export default function RootPage() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
-  const [errorMsg, setErrorMsg] = useState('');
-  const [q, setQ] = useState('');
-  const [page, setPage] = useState(0);
-
-  const from = page * PAGE_SIZE;
-  const to = from + PAGE_SIZE - 1;
-  const queryText = useMemo(() => q.trim(), [q]);
-  const [mostrarReenvasado, setMostrarReenvasado] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    const cargar = async () => {
-      setLoading(true);
-      setErrorMsg('');
-
-      const base = supabase
-        .from('medicamentos')
-        .select(
-          `
-          codigo_sap,
-          nombre_medicamento,
-          principio_activo,
-          medicamento_metodo (
-            metodo_id,
-            metodo_reenvasado (
-              tipo_reenvasado
-            )
-          )
-        `
-        )
-        .order('nombre_medicamento', { ascending: true })
-        .range(from, to);
-
-      const query =
-        queryText.length > 0
-          ? base.or(
-              `nombre_medicamento.ilike.%${queryText}%,principio_activo.ilike.%${queryText}%`
-            )
-          : base;
-
-      const { data, error } = await query;
-
-      if (error) {
-        setErrorMsg(error.message);
-        setMedicamentos([]);
-      } else {
-        setMedicamentos(data ?? []);
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        router.replace('/login');
+        return;
       }
 
-      setLoading(false);
+      if (session.user.email === 'admin@admin.com') {
+        setIsAdmin(true);
+        setLoading(false);
+      } else {
+        router.replace('/reenvasado');
+      }
     };
 
-    cargar();
-  }, [from, to, queryText]);
+    checkUser();
+  }, [router]);
 
-  useEffect(() => {
-    setPage(0);
-  }, [queryText]);
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.replace('/login');
+  };
 
-  return (
-    <main style={{ padding: '2rem', fontFamily: 'system-ui' }}>
-      <h1 style={{ marginBottom: 8 }}>Medicamentos para reenvasado</h1>
-
-      <button
-        onClick={() => setMostrarReenvasado((v) => !v)}
-        style={{
-          display: 'inline-block',
-          marginBottom: 16,
-          padding: '8px 12px',
-          border: '1px solid #ccc',
-          borderRadius: 8,
-          background: 'white',
-          cursor: 'pointer',
-        }}
-      >
-        ➕ Registrar reenvasado
-      </button>
-
-      {mostrarReenvasado && (
-        <div
-          style={{
-            border: '1px solid #ddd',
-            borderRadius: 12,
-            padding: 16,
-            marginBottom: 16,
-            background: '#fafafa',
-          }}
-        >
-          <h2 style={{ marginTop: 0 }}>Registrar reenvasado</h2>
-
-          {okMsg && (
-            <div
-              style={{
-                background: '#eaf7ea',
-                border: '1px solid #bfe6bf',
-                padding: 10,
-                borderRadius: 8,
-                marginBottom: 12,
-              }}
-            >
-              ✅ {okMsg}
-            </div>
-          )}
-
-          <div
-            style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr 1fr' }}
-          >
-            {/* Medicamento */}
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label
-                style={{ display: 'block', fontWeight: 600, marginBottom: 6 }}
-              >
-                Medicamento
-              </label>
-              <select
-                value={seleccionadoSap ?? ''}
-                onChange={(e) => {
-                  const v = e.target.value ? Number(e.target.value) : null;
-                  setSeleccionadoSap(v);
-                  setMetodoId(null);
-                }}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: '1px solid #ccc',
-                  borderRadius: 8,
-                }}
-              >
-                <option value="">— Selecciona un medicamento —</option>
-                {medicamentos.map((m) => (
-                  <option key={m.codigo_sap} value={m.codigo_sap}>
-                    {m.nombre_medicamento} (SAP {m.codigo_sap})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Método */}
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label
-                style={{ display: 'block', fontWeight: 600, marginBottom: 6 }}
-              >
-                Método de reenvasado
-              </label>
-
-              <select
-                value={metodoId ?? ''}
-                onChange={(e) =>
-                  setMetodoId(e.target.value ? Number(e.target.value) : null)
-                }
-                disabled={!seleccionadoSap}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: '1px solid #ccc',
-                  borderRadius: 8,
-                  opacity: !seleccionadoSap ? 0.6 : 1,
-                }}
-              >
-                <option value="">— Selecciona un método —</option>
-
-                {(() => {
-                  const med = medicamentos.find(
-                    (m) => m.codigo_sap === seleccionadoSap
-                  );
-                  const rels = med?.medicamento_metodo ?? [];
-                  return rels.map((r) => (
-                    <option key={r.metodo_id} value={r.metodo_id}>
-                      {r.metodo_reenvasado?.tipo_reenvasado ??
-                        `Método ${r.metodo_id}`}
-                    </option>
-                  ));
-                })()}
-              </select>
-
-              {!seleccionadoSap && (
-                <div style={{ marginTop: 6, opacity: 0.7 }}>
-                  Selecciona primero un medicamento.
-                </div>
-              )}
-            </div>
-
-            {/* Cantidades */}
-            <div>
-              <label
-                style={{ display: 'block', fontWeight: 600, marginBottom: 6 }}
-              >
-                Cantidad inicial
-              </label>
-              <input
-                type="number"
-                min={0}
-                value={cantidad}
-                onChange={(e) => setCantidad(Number(e.target.value))}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: '1px solid #ccc',
-                  borderRadius: 8,
-                }}
-              />
-            </div>
-
-            <div>
-              <label
-                style={{ display: 'block', fontWeight: 600, marginBottom: 6 }}
-              >
-                Cantidad final
-              </label>
-              <input
-                type="number"
-                min={0}
-                value={cantidadFinal}
-                onChange={(e) => setCantidadFinal(Number(e.target.value))}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: '1px solid #ccc',
-                  borderRadius: 8,
-                }}
-              />
-            </div>
-
-            {/* Lote + caducidades */}
-            <div>
-              <label
-                style={{ display: 'block', fontWeight: 600, marginBottom: 6 }}
-              >
-                Lote original
-              </label>
-              <input
-                value={loteOriginal}
-                onChange={(e) => setLoteOriginal(e.target.value)}
-                placeholder="Ej: L12345"
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: '1px solid #ccc',
-                  borderRadius: 8,
-                }}
-              />
-            </div>
-
-            <div>
-              <label
-                style={{ display: 'block', fontWeight: 600, marginBottom: 6 }}
-              >
-                Caducidad original
-              </label>
-              <input
-                type="date"
-                value={cadOriginal}
-                onChange={(e) => setCadOriginal(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: '1px solid #ccc',
-                  borderRadius: 8,
-                }}
-              />
-            </div>
-
-            <div>
-              <label
-                style={{ display: 'block', fontWeight: 600, marginBottom: 6 }}
-              >
-                Caducidad reenvasado
-              </label>
-              <input
-                type="date"
-                value={cadReenv}
-                onChange={(e) => setCadReenv(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: '1px solid #ccc',
-                  borderRadius: 8,
-                }}
-              />
-            </div>
-
-            <div>
-              <label
-                style={{ display: 'block', fontWeight: 600, marginBottom: 6 }}
-              >
-                Incidencias (opcional)
-              </label>
-              <input
-                value={incidencias}
-                onChange={(e) => setIncidencias(e.target.value)}
-                maxLength={255}
-                placeholder="Breve (máx. 255)"
-                style={{
-                  width: '100%',
-                  padding: '10px 12px',
-                  border: '1px solid #ccc',
-                  borderRadius: 8,
-                }}
-              />
-            </div>
-          </div>
-
-          <div style={{ marginTop: 14, display: 'flex', gap: 10 }}>
-            <button
-              disabled={guardando}
-              onClick={async () => {
-                setErrorMsg('');
-                setOkMsg('');
-
-                if (!seleccionadoSap)
-                  return setErrorMsg('Selecciona un medicamento.');
-                if (!metodoId) return setErrorMsg('Selecciona un método.');
-                if (!loteOriginal.trim())
-                  return setErrorMsg('Indica el lote original.');
-                if (!cadOriginal)
-                  return setErrorMsg('Indica la caducidad original.');
-                if (!cadReenv)
-                  return setErrorMsg('Indica la caducidad reenvasado.');
-                if (cantidad <= 0)
-                  return setErrorMsg('La cantidad inicial debe ser > 0.');
-                if (cantidadFinal < 0)
-                  return setErrorMsg(
-                    'La cantidad final no puede ser negativa.'
-                  );
-                if (cantidadFinal > cantidad)
-                  return setErrorMsg(
-                    'La cantidad final no puede ser mayor que la inicial.'
-                  );
-
-                setGuardando(true);
-
-                const { error } = await supabase
-                  .from('actividad_reenvasado')
-                  .insert({
-                    codigo_sap: seleccionadoSap,
-                    metodo_id: metodoId,
-                    cantidad,
-                    cantidad_final: cantidadFinal,
-                    lote_original: loteOriginal.trim(),
-                    caducidad_original: cadOriginal,
-                    caducidad_reenvasado: cadReenv,
-                    incidencias: incidencias.trim() ? incidencias.trim() : null,
-                  });
-
-                setGuardando(false);
-
-                if (error) {
-                  setErrorMsg(error.message);
-                } else {
-                  setOkMsg('Actividad registrada correctamente.');
-
-                  setSeleccionadoSap(null);
-                  setMetodoId(null);
-                  setCantidad(0);
-                  setCantidadFinal(0);
-                  setLoteOriginal('');
-                  setCadOriginal('');
-                  setCadReenv('');
-                  setIncidencias('');
-                }
-              }}
-              style={{
-                padding: '10px 12px',
-                borderRadius: 8,
-                border: '1px solid #ccc',
-                background: 'white',
-                cursor: 'pointer',
-              }}
-            >
-              {guardando ? 'Guardando…' : '💾 Guardar actividad'}
-            </button>
-
-            <button
-              onClick={() => setMostrarReenvasado(false)}
-              style={{
-                padding: '10px 12px',
-                borderRadius: 8,
-                border: '1px solid #ccc',
-                background: 'white',
-                cursor: 'pointer',
-                opacity: 0.8,
-              }}
-            >
-              Cerrar
-            </button>
+  if (loading) {
+    return (
+      <main style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', background: '#f8fafc', fontFamily: 'sans-serif' }}>
+        <div style={{ textAlign: 'center', padding: '3rem', background: 'white', borderRadius: '24px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 15 }}>
+          <Loader2 size={40} className="animate-spin" color="#0ea5e9" style={{ animation: 'spin 1s linear infinite' }} />
+          <div>
+            <h2 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>Farmacia HUCA</h2>
+            <p style={{ fontSize: '0.85rem', color: '#64748b', marginTop: 5 }}>Verificando credenciales...</p>
           </div>
         </div>
-      )}
+        <style jsx global>{`
+          @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        `}</style>
+      </main>
+    );
+  }
 
-      {/* Buscador */}
-      <div
-        style={{
-          display: 'flex',
-          gap: 12,
-          alignItems: 'center',
-          marginBottom: 16,
-        }}
-      >
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Buscar por medicamento o principio activo…"
-          style={{
-            padding: '10px 12px',
-            width: 420,
-            maxWidth: '100%',
-            border: '1px solid #ccc',
-            borderRadius: 8,
-          }}
-        />
+  return (
+    <main style={{ minHeight: '100vh', background: '#f8fafc', display: 'flex', justifyContent: 'center', alignItems: 'center', fontFamily: 'sans-serif', padding: '1rem' }}>
+      
+      <div style={{ background: 'white', padding: '2.5rem', borderRadius: '24px', boxShadow: '0 20px 40px -5px rgba(0,0,0,0.1)', width: '100%', maxWidth: '500px' }}>
+        
+        <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
+          <div style={{ background: '#fef3c7', width: 60, height: 60, borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem auto' }}>
+            <Shield size={32} color="#d97706" />
+          </div>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 900, color: '#0f172a', margin: 0 }}>Panel de Control</h1>
+          <p style={{ color: '#64748b', marginTop: 8 }}>Bienvenido, Administrador</p>
+        </div>
 
-        <button
-          onClick={() => setQ('')}
-          style={{
-            padding: '10px 12px',
-            borderRadius: 8,
-            border: '1px solid #ccc',
-          }}
-        >
-          Limpiar
-        </button>
+        <div style={{ display: 'grid', gap: '1rem' }}>
+          
+          {/* Opción 1: Gestión de Usuarios */}
+          <button 
+            onClick={() => router.push('/admin')}
+            style={{ 
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '1.2rem', background: 'white', border: '2px solid #e2e8f0', 
+              borderRadius: '16px', cursor: 'pointer', transition: 'all 0.2s',
+              textAlign: 'left'
+            }}
+            onMouseOver={(e) => e.currentTarget.style.borderColor = '#d97706'}
+            onMouseOut={(e) => e.currentTarget.style.borderColor = '#e2e8f0'}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ background: '#fffbeb', padding: 8, borderRadius: 10 }}><Shield size={20} color="#d97706"/></div>
+              <div>
+                <div style={{ fontWeight: 800, color: '#0f172a' }}>Gestión de Usuarios</div>
+                <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Asignar roles de Técnico o Farmacéutico</div>
+              </div>
+            </div>
+            <ArrowRight size={18} color="#cbd5e1" />
+          </button>
+
+          {/* NUEVA Opción 2: Gestión de Catálogo */}
+          <button 
+            onClick={() => router.push('/admin/medicamentos')}
+            style={{ 
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '1.2rem', background: 'white', border: '2px solid #e2e8f0', 
+              borderRadius: '16px', cursor: 'pointer', transition: 'all 0.2s',
+              textAlign: 'left'
+            }}
+            onMouseOver={(e) => e.currentTarget.style.borderColor = '#0ea5e9'}
+            onMouseOut={(e) => e.currentTarget.style.borderColor = '#e2e8f0'}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ background: '#f0f9ff', padding: 8, borderRadius: 10 }}><Package size={20} color="#0ea5e9"/></div>
+              <div>
+                <div style={{ fontWeight: 800, color: '#0f172a' }}>Catálogo de Fármacos</div>
+                <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Añadir medicamentos y editar métodos</div>
+              </div>
+            </div>
+            <ArrowRight size={18} color="#cbd5e1" />
+          </button>
+
+          {/* Opción 3: Ir a la App */}
+          <button 
+            onClick={() => router.push('/reenvasado')}
+            style={{ 
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '1.2rem', background: 'white', border: '2px solid #e2e8f0', 
+              borderRadius: '16px', cursor: 'pointer', transition: 'all 0.2s',
+              textAlign: 'left'
+            }}
+            onMouseOver={(e) => e.currentTarget.style.borderColor = '#10b981'}
+            onMouseOut={(e) => e.currentTarget.style.borderColor = '#e2e8f0'}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ background: '#f0fdf4', padding: 8, borderRadius: 10 }}><LayoutDashboard size={20} color="#10b981"/></div>
+              <div>
+                <div style={{ fontWeight: 800, color: '#0f172a' }}>Entrar a la Aplicación</div>
+                <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Ir a Reenvasado y Producción</div>
+              </div>
+            </div>
+            <ArrowRight size={18} color="#cbd5e1" />
+          </button>
+
+        </div>
+
+        <div style={{ marginTop: '2.5rem', paddingTop: '1.5rem', borderTop: '1px solid #f1f5f9', textAlign: 'center' }}>
+          <button 
+            onClick={handleLogout}
+            style={{ 
+              background: 'transparent', border: 'none', color: '#ef4444', 
+              fontWeight: 700, cursor: 'pointer', display: 'flex', 
+              alignItems: 'center', justifyContent: 'center', gap: 8, 
+              margin: '0 auto', padding: '10px 20px', borderRadius: '10px'
+            }}
+            onMouseOver={(e) => e.currentTarget.style.background = '#fef2f2'}
+            onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+          >
+            <LogOut size={18} /> Cerrar Sesión Segura
+          </button>
+        </div>
+
       </div>
-
-      {/* Paginación */}
-      <div
-        style={{
-          display: 'flex',
-          gap: 10,
-          alignItems: 'center',
-          marginBottom: 12,
-        }}
-      >
-        <button
-          onClick={() => setPage((p) => Math.max(0, p - 1))}
-          disabled={page === 0 || loading}
-          style={{
-            padding: '8px 10px',
-            borderRadius: 8,
-            border: '1px solid #ccc',
-          }}
-        >
-          ◀ Anterior
-        </button>
-
-        <button
-          onClick={() => setPage((p) => p + 1)}
-          disabled={loading || medicamentos.length < PAGE_SIZE}
-          style={{
-            padding: '8px 10px',
-            borderRadius: 8,
-            border: '1px solid #ccc',
-          }}
-        >
-          Siguiente ▶
-        </button>
-
-        <span style={{ opacity: 0.7 }}>
-          Página {page + 1} (mostrando {from + 1}–{from + medicamentos.length})
-        </span>
-      </div>
-
-      {/* Estados */}
-      {loading && <p>Cargando…</p>}
-
-      {errorMsg && (
-        <pre style={{ color: 'crimson', whiteSpace: 'pre-wrap' }}>
-          Error: {errorMsg}
-        </pre>
-      )}
-
-      {/* Listado */}
-      {!loading && !errorMsg && (
-        <ul style={{ lineHeight: 1.8 }}>
-          {medicamentos.map((m) => (
-            <li key={m.codigo_sap} style={{ marginBottom: 12 }}>
-              <strong>{m.nombre_medicamento}</strong>{' '}
-              <em>({m.principio_activo ?? '—'})</em>
-              <span style={{ opacity: 0.6 }}> — SAP {m.codigo_sap}</span>
-              <ul style={{ marginTop: 6, marginBottom: 0, opacity: 0.9 }}>
-                {(m.medicamento_metodo ?? []).length === 0 ? (
-                  <li style={{ opacity: 0.6 }}>
-                    Sin método de reenvasado asignado
-                  </li>
-                ) : (
-                  m.medicamento_metodo.map((rel) => (
-                    <li key={rel.metodo_id}>
-                      {rel.metodo_reenvasado?.tipo_reenvasado ??
-                        'Método desconocido'}
-                    </li>
-                  ))
-                )}
-              </ul>
-            </li>
-          ))}
-        </ul>
-      )}
     </main>
   );
 }
