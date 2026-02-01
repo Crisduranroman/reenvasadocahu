@@ -85,10 +85,8 @@ export default function LoginPage() {
             <Pill color="white" size={32} />
           </div>
           <h1 style={{ fontSize: '1.75rem', fontWeight: 900, color: '#0f172a', margin: 0, letterSpacing: '-0.025em' }}>
-           Servicio de Farmacia 
-  <br />
-  Hospital de Cabueñes
-          </h1>
+           Farmacia HUCA
+            </h1>
           <p style={{ color: '#64748b', fontSize: '0.95rem', marginTop: 8, fontWeight: 500 }}>
             Reenvasado de Medicamentos: Programación y Validación
           </p>
