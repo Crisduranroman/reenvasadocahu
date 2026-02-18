@@ -29,10 +29,10 @@ export default function LoginPage() {
     }
 
     if (authData?.session) {
-      // 2. Verificación de estado ACTIVO en la tabla perfiles
+      // 2. Verificación de estado ACTIVO y rol en la tabla perfiles
       const { data: perfil, error: perfilError } = await supabase
         .from('perfiles')
-        .select('activo')
+        .select('rol, activo')
         .eq('user_id', authData.session.user.id)
         .single();
 
@@ -45,7 +45,7 @@ export default function LoginPage() {
       }
 
       // 3. Redirección según rol si está activo
-      if (email === 'admin@admin.com') {
+      if (perfil && perfil.rol === 'admin') {
         router.replace('/');
       } else {
         router.replace('/reenvasado');
@@ -57,7 +57,6 @@ export default function LoginPage() {
     <main style={{ 
       minHeight: '100vh', 
       display: 'flex', 
-      justifyContent: 'center', 
       alignItems: 'center', 
       background: '#f8fafc', 
       fontFamily: 'sans-serif',

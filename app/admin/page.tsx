@@ -19,14 +19,30 @@ export default function AdminPage() {
   useEffect(() => {
     const verificarAdmin = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      
-      if (!session || session.user.email !== 'admin@admin.com') {
-        router.replace('/'); 
+      if (!session) {
+        router.replace('/');
         return;
       }
 
-      setIsAdmin(true);
-      cargarUsuarios();
+      // Consultar el perfil del usuario
+      const { data: perfil, error: perfilError } = await supabase
+        .from('perfiles')
+        .select('rol, activo')
+        .eq('user_id', session.user.id)
+        .single();
+
+      if (perfilError || !perfil || perfil.activo === false) {
+        await supabase.auth.signOut();
+        router.replace('/');
+        return;
+      }
+
+      if (perfil.rol === 'admin') {
+        setIsAdmin(true);
+        cargarUsuarios();
+      } else {
+        router.replace('/');
+      }
     };
     verificarAdmin();
   }, [router]);
@@ -153,12 +169,13 @@ export default function AdminPage() {
                 
                 <td style={{ padding: '1.2rem' }}>
                     <select 
-                        value={u.rol} 
-                        onChange={(e) => cambiarRol(u.user_id, e.target.value)}
-                        style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', cursor: 'pointer', background: 'white', fontWeight: 600, color: '#475569' }}
+                      value={u.rol} 
+                      onChange={(e) => cambiarRol(u.user_id, e.target.value)}
+                      style={{ padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', cursor: 'pointer', background: 'white', fontWeight: 600, color: '#475569' }}
                     >
-                        <option value="tecnico">Técnico</option>
-                        <option value="farmaceutico">Farmacéutico</option>
+                      <option value="tecnico">Técnico</option>
+                      <option value="farmaceutico">Farmacéutico</option>
+                      <option value="admin">Administrador</option>
                     </select>
                 </td>
 

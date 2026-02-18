@@ -13,13 +13,25 @@ export default function RootPage() {
   useEffect(() => {
     const checkUser = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      
       if (!session) {
         router.replace('/login');
         return;
       }
 
-      if (session.user.email === 'admin@admin.com') {
+      // Consulta el perfil del usuario
+      const { data: perfil, error: perfilError } = await supabase
+        .from('perfiles')
+        .select('rol, activo')
+        .eq('user_id', session.user.id)
+        .single();
+
+      if (perfilError || !perfil || perfil.activo === false) {
+        await supabase.auth.signOut();
+        router.replace('/login');
+        return;
+      }
+
+      if (perfil.rol === 'admin') {
         setIsAdmin(true);
         setLoading(false);
       } else {
