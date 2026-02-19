@@ -21,7 +21,10 @@ export default function LoginPage() {
       setLoading(false);
       return;
     }
-
+          <h1 style={{ fontSize: 40, fontWeight: 900 }}>CABUEÑES LOGIN NUEVO ✅</h1>
+          <div style={{ fontSize: 24, color: 'red', marginTop: 20 }}>
+            VERSIÓN ACTUALIZADA - PRUEBA IMPOSIBLE DE CONFUNDIR 🚀
+          </div>
     // 1. Intento de inicio de sesión
     const email = username.includes('@') ? username : `${username}@sespa.es`;
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
