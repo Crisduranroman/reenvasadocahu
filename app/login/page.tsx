@@ -21,10 +21,6 @@ export default function LoginPage() {
       setLoading(false);
       return;
     }
-          <h1 style={{ fontSize: 40, fontWeight: 900 }}>CABUEÑES LOGIN NUEVO ✅</h1>
-          <div style={{ fontSize: 24, color: 'red', marginTop: 20 }}>
-            VERSIÓN ACTUALIZADA - PRUEBA IMPOSIBLE DE CONFUNDIR 🚀
-          </div>
     // 1. Intento de inicio de sesión
     const email = username.includes('@') ? username : `${username}@sespa.es`;
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
@@ -72,7 +68,12 @@ export default function LoginPage() {
       fontFamily: 'sans-serif',
       padding: '1rem'
     }}>
-      
+      <div style={{ position: 'fixed', top: 10, right: 10, zIndex: 9999, background: 'yellow', padding: 6, fontWeight: 900 }}>
+        CABUEÑES LOGIN NUEVO ✅
+        <div style={{ fontSize: 18, color: 'red', marginTop: 4 }}>
+          VERSIÓN ACTUALIZADA - PRUEBA IMPOSIBLE DE CONFUNDIR 🚀
+        </div>
+      </div>
       <div style={{ 
         width: '100%', 
         maxWidth: '420px', 
@@ -141,7 +142,7 @@ export default function LoginPage() {
             }}
           >
             {loading ? (
-              <Loader2 style={{ animation: 'spin 1s linear infinite' }} size={20} />
+              <Loader2 style={{ animation: 'girar 1s linear infinite' }} size={20} />
             ) : (
               <><span>Iniciar sesión</span><ArrowRight size={20} /></>
             )}
