@@ -68,12 +68,7 @@ export default function LoginPage() {
       fontFamily: 'sans-serif',
       padding: '1rem'
     }}>
-      <div style={{ position: 'fixed', top: 10, right: 10, zIndex: 9999, background: 'yellow', padding: 6, fontWeight: 900 }}>
-        CABUEÑES LOGIN NUEVO ✅
-        <div style={{ fontSize: 18, color: 'red', marginTop: 4 }}>
-          VERSIÓN ACTUALIZADA - PRUEBA IMPOSIBLE DE CONFUNDIR 🚀
-        </div>
-      </div>
+      // ...existing code...
       <div style={{ 
         width: '100%', 
         maxWidth: '420px', 
@@ -162,4 +157,4 @@ export default function LoginPage() {
     </main>
   );
 }
-// trigger vercel
+
