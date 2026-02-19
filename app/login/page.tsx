@@ -8,7 +8,7 @@ import { Lock, Mail, Loader2, Pill, ArrowRight } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -16,7 +16,14 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
 
+    if (!supabase) {
+      alert("Error interno: conexión a Supabase no disponible.");
+      setLoading(false);
+      return;
+    }
+
     // 1. Intento de inicio de sesión
+    const email = username.includes('@') ? username : `${username}@sespa.es`;
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -83,12 +90,12 @@ export default function LoginPage() {
           }}>
             <Pill color="white" size={32} />
           </div>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 900, color: '#0f172a', margin: 0, letterSpacing: '-0.025em' }}>
-           Farmacia HUCA
-            </h1>
-          <p style={{ color: '#64748b', fontSize: '0.95rem', marginTop: 8, fontWeight: 500 }}>
-            Reenvasado de Medicamentos: Programación y Validación
-          </p>
+          <h1 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a', margin: 0, letterSpacing: '-0.025em', lineHeight: 1.2 }}>
+            Reenvasado de Medicamentos
+          </h1>
+          <div style={{ color: '#64748b', fontSize: '0.95rem', fontWeight: 600, marginTop: 4 }}>
+            Servicio de Farmacia. Hospital Universitario de Cabueñes
+          </div>
         </div>
 
         <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
@@ -98,10 +105,10 @@ export default function LoginPage() {
               <Mail size={20} color="#94a3b8" />
             </div>
             <input 
-              type="email" 
-              placeholder="Correo corporativo" 
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              type="text" 
+              placeholder="Usuario (sin @sespa.es)" 
+              value={username}
+              onChange={(e) => setUsername(e.target.value.replace(/\s/g, ''))}
               required
               style={{ width: '100%', padding: '16px 16px 16px 48px', borderRadius: '16px', border: '2px solid #e2e8f0', outline: 'none', fontSize: '0.95rem', color: '#334155' }} 
             />
@@ -133,19 +140,19 @@ export default function LoginPage() {
             {loading ? (
               <Loader2 style={{ animation: 'spin 1s linear infinite' }} size={20} />
             ) : (
-              <><span>Iniciar Sesión</span><ArrowRight size={20} /></>
+              <><span>Iniciar sesión</span><ArrowRight size={20} /></>
             )}
           </button>
         </form>
 
         <div style={{ marginTop: '2.5rem', textAlign: 'center', borderTop:'1px solid #f1f5f9', paddingTop:'1.5rem' }}>
           <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: 0 }}>
-            Uso exclusivo personal autorizado
+            Uso exclusivo de personal autorizado
           </p>
         </div>
 
         <style jsx global>{`
-          @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+          @keyframes girar { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
         `}</style>
       </div>
     </main>

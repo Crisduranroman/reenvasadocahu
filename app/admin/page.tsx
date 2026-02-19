@@ -1,15 +1,23 @@
 'use client';
+'use client';
+
+import NuevoUsuarioForm from '../../components/NuevoUsuarioForm';
+import CambiarPassword from '../../components/CambiarPassword';
 
 import { useEffect, useState } from 'react';
+import AltaUsuarioAuth from '../../components/AltaUsuarioAuth';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabaseClient';
+import { supabase as _supabase } from '@/lib/supabaseClient';
+const supabase: any = _supabase;
 import { Shield, Users, ArrowLeft, Power, UserPlus, X, Mail, Lock } from 'lucide-react';
 
 export default function AdminPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [usuarios, setUsuarios] = useState<any[]>([]);
+  const [emails, setEmails] = useState<{ [userId: string]: string }>({});
   const [isAdmin, setIsAdmin] = useState(false);
+  const [passwordModal, setPasswordModal] = useState<{ open: boolean, userId: string, email: string } | null>(null);
 
   // Estados para el Modal de Nuevo Usuario
   const [modalOpen, setModalOpen] = useState(false);
@@ -18,6 +26,11 @@ export default function AdminPage() {
 
   useEffect(() => {
     const verificarAdmin = async () => {
+        if (!supabase) {
+          alert('Error de configuración de Supabase.');
+          router.replace('/');
+          return;
+        }
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         router.replace('/');
@@ -48,6 +61,11 @@ export default function AdminPage() {
   }, [router]);
 
   const cargarUsuarios = async () => {
+    if (!supabase) {
+      alert('Error de configuración de Supabase.');
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const { data, error } = await supabase
       .from('perfiles')
@@ -55,11 +73,30 @@ export default function AdminPage() {
       .order('nombre', { ascending: true });
 
     if (error) console.error("Error:", error);
-    else setUsuarios(data || []);
+    else {
+      setUsuarios(data || []);
+      // Obtener emails reales de Auth para cada usuario
+      const emailMap: { [userId: string]: string } = {};
+      if (data && Array.isArray(data)) {
+        await Promise.all(data.map(async (u: any) => {
+          if (u.user_id) {
+            const { data: userData } = await supabase.auth.admin.getUserById(u.user_id);
+            if (userData?.user?.email) {
+              emailMap[u.user_id] = userData.user.email;
+            }
+          }
+        }));
+      }
+      setEmails(emailMap);
+    }
     setLoading(false);
   };
 
   const cambiarRol = async (userId: string, nuevoRol: string) => {
+    if (!supabase) {
+      alert('Error de configuración de Supabase.');
+      return;
+    }
     const { error } = await supabase
       .from('perfiles')
       .update({ rol: nuevoRol })
@@ -73,6 +110,10 @@ export default function AdminPage() {
   };
 
   const toggleEstadoUsuario = async (userId: string, estadoActual: boolean) => {
+    if (!supabase) {
+      alert('Error de configuración de Supabase.');
+      return;
+    }
     const nuevoEstado = !estadoActual;
     const { error } = await supabase
       .from('perfiles')
@@ -88,6 +129,10 @@ export default function AdminPage() {
 
   // --- FUNCIÓN DE CREACIÓN SIMPLIFICADA (DEJA QUE EL TRIGGER TRABAJE) ---
   const handleCrearUsuario = async () => {
+    if (!supabase) {
+      alert('Error de configuración de Supabase.');
+      return;
+    }
     if (!nuevoUsuario.email || !nuevoUsuario.password) {
       return alert("⚠️ Por favor, introduce email y contraseña.");
     }
@@ -128,7 +173,7 @@ export default function AdminPage() {
           <div style={{ background: '#f59e0b', padding: '10px', borderRadius: '12px' }}><Shield color="white" /></div>
           <div>
             <h1 style={{ fontSize: '1.2rem', fontWeight: 900, margin: 0 }}>Panel de Administración</h1>
-            <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Gestión de Usuarios HUCA</span>
+            <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Gestión de Usuarios. Servicio de Farmacia. Hospital Universitario de Cabueñes</span>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
@@ -164,7 +209,11 @@ export default function AdminPage() {
               <tr key={u.user_id} style={{ borderTop: '1px solid #f1f5f9', opacity: u.activo === false ? 0.6 : 1 }}>
                 <td style={{ padding: '1.2rem' }}>
                   <div style={{ fontWeight: 700, color: '#0f172a' }}>{u.nombre}</div>
-                  <div style={{ fontSize: '0.7rem', color: '#94a3b8', fontFamily:'monospace' }}>ID: {u.user_id.split('-')[0]}...</div>
+                  {emails[u.user_id] && (
+                    <div style={{ fontSize: '0.8rem', color: '#0284c7', fontFamily:'monospace', marginTop: 2 }}>
+                      {emails[u.user_id]}
+                    </div>
+                  )}
                 </td>
                 
                 <td style={{ padding: '1.2rem' }}>
@@ -189,24 +238,41 @@ export default function AdminPage() {
                   </span>
                 </td>
 
-                <td style={{ padding: '1.2rem' }}>
-                    <button 
-                      onClick={() => toggleEstadoUsuario(u.user_id, u.activo !== false)}
-                      style={{ 
-                        padding: '8px', 
-                        borderRadius: '8px', 
-                        border: 'none', 
-                        cursor: 'pointer',
-                        background: u.activo !== false ? '#fee2e2' : '#dcfce7',
-                        color: u.activo !== false ? '#ef4444' : '#10b981',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
-                      title={u.activo !== false ? "Inactivar Usuario" : "Activar Usuario"}
-                    >
-                      <Power size={18} />
-                    </button>
+                <td style={{ padding: '1.2rem', display: 'flex', gap: 8 }}>
+                  <button
+                    onClick={() => setPasswordModal({ open: true, userId: u.user_id, email: u.email })}
+                    style={{
+                      padding: '8px',
+                      borderRadius: '8px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      background: '#0ea5e9',
+                      color: 'white',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                    title="Cambiar contraseña"
+                  >
+                    <Lock size={18} />
+                  </button>
+                  <button 
+                    onClick={() => toggleEstadoUsuario(u.user_id, u.activo !== false)}
+                    style={{ 
+                      padding: '8px', 
+                      borderRadius: '8px', 
+                      border: 'none', 
+                      cursor: 'pointer',
+                      background: u.activo !== false ? '#fee2e2' : '#dcfce7',
+                      color: u.activo !== false ? '#ef4444' : '#10b981',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                    title={u.activo !== false ? "Inactivar Usuario" : "Activar Usuario"}
+                  >
+                    <Power size={18} />
+                  </button>
                 </td>
               </tr>
             ))}
@@ -225,35 +291,19 @@ export default function AdminPage() {
             </div>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.2rem' }}>
-              <div style={{ position: 'relative' }}>
-                <Mail size={18} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }}/>
-                <input 
-                  placeholder="Email corporativo" 
-                  value={nuevoUsuario.email} 
-                  onChange={e => setNuevoUsuario({...nuevoUsuario, email: e.target.value})} 
-                  style={{ width: '100%', padding: '12px 12px 12px 40px', borderRadius: '12px', border: '1px solid #e2e8f0', outline: 'none' }} 
-                />
-              </div>
-
-              <div style={{ position: 'relative' }}>
-                <Lock size={18} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }}/>
-                <input 
-                  type="password" 
-                  placeholder="Contraseña de acceso" 
-                  value={nuevoUsuario.password} 
-                  onChange={e => setNuevoUsuario({...nuevoUsuario, password: e.target.value})} 
-                  style={{ width: '100%', padding: '12px 12px 12px 40px', borderRadius: '12px', border: '1px solid #e2e8f0', outline: 'none' }} 
-                />
-              </div>
-              
-              <button 
-                onClick={handleCrearUsuario} 
-                disabled={creando}
-                style={{ background: '#0f172a', color: 'white', padding: '14px', borderRadius: '12px', border: 'none', fontWeight: 800, cursor: creando ? 'wait' : 'pointer', marginTop: '1rem', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, opacity: creando ? 0.7 : 1 }}
-              >
-                {creando ? 'Registrando...' : 'Confirmar Alta'}
-              </button>
+              <AltaUsuarioAuth onSuccess={() => { setModalOpen(false); cargarUsuarios(); }} />
             </div>
+          </div>
+        </div>
+      )}
+      {passwordModal?.open && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.5)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 200, padding: '1rem' }}>
+          <div style={{ background: 'white', padding: '2.5rem', borderRadius: '24px', width: '100%', maxWidth: '400px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h2 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 900, color: '#0f172a' }}>Cambiar Contraseña</h2>
+              <button onClick={() => setPasswordModal(null)} style={{ border: 'none', background: '#f1f5f9', padding: '5px', borderRadius: '50%', cursor: 'pointer' }}><X size={20}/></button>
+            </div>
+            <CambiarPassword userId={passwordModal.userId} email={passwordModal.email} onSuccess={() => setPasswordModal(null)} />
           </div>
         </div>
       )}

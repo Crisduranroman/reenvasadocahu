@@ -9,6 +9,17 @@ import {
   FlaskConical, User 
 } from 'lucide-react';
 
+// Asocia cada método de reenvasado a un icono de Lucide
+const metodoIcono = (metodo) => {
+  if (!metodo) return <FlaskConical size={12} />;
+  const tipo = metodo.toLowerCase();
+  if (tipo.includes('sin blister')) return <FlaskConical size={12} />;
+  if (tipo.includes('blister')) return <Pill size={12} />;
+  if (tipo.includes('estándar') || tipo.includes('estandar')) return <Beaker size={12} />;
+  if (tipo.includes('manual')) return <ClipboardList size={12} />;
+  return <FlaskConical size={12} />;
+};
+
 type Medicamento = {
   codigo_sap: number;
   nombre_medicamento: string;
@@ -20,6 +31,15 @@ type Medicamento = {
 };
 
 export default function ReenvasadoPage() {
+    // ...existing code...
+    const eliminarTarea = async (id: string) => {
+      if (!window.confirm('¿Seguro que deseas eliminar esta tarea?')) return;
+      const { error } = await supabase.from('tareas_reenvasado').delete().eq('id', id);
+      if (error) return alert('Error al eliminar: ' + error.message);
+      await cargarTareas();
+      setTareaActiva(null);
+      setSeleccionado(null);
+    };
   const router = useRouter();
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [userRol, setUserRol] = useState<string>('tecnico'); 
@@ -33,6 +53,7 @@ export default function ReenvasadoPage() {
   const [seleccionado, setSeleccionado] = useState<Medicamento | null>(null);
   
   const [metodoId, setMetodoId] = useState<number | null>(null);
+  const [prioridad, setPrioridad] = useState<string>('');
   
   const [cantidad, setCantidad] = useState<number>(0);
   const [cantidadFinal, setCantidadFinal] = useState<number>(0);
@@ -101,6 +122,8 @@ export default function ReenvasadoPage() {
           codigo_sap, 
           nombre_medicamento, 
           principio_activo, 
+          ubicacion,
+          codigo_agrup,
           activo,
           medicamento_metodo(
             metodo_id, 
@@ -112,6 +135,7 @@ export default function ReenvasadoPage() {
       .eq('medicamentos.activo', true) 
       .order('creado_en', { ascending: true });
 
+    const prioridadValor = (p) => p === 'muy urgente' ? 2 : p === 'urgente' ? 1 : 0;
     const tareasProcesadas = (data || []).map((t: any) => {
       let metodoVisual = 'Estándar'; 
       if (t.medicamentos?.medicamento_metodo?.length > 0) {
@@ -121,7 +145,8 @@ export default function ReenvasadoPage() {
         metodoVisual = metodosOrdenados[0]?.metodo_reenvasado?.tipo_reenvasado || 'Estándar';
       }
       return { ...t, metodo_visual: metodoVisual };
-    });
+    })
+    .sort((a, b) => prioridadValor(b.prioridad) - prioridadValor(a.prioridad));
 
     setTareasPendientes(tareasProcesadas);
   };
@@ -161,6 +186,7 @@ export default function ReenvasadoPage() {
     const { error } = await supabase.from('tareas_reenvasado').insert({
       codigo_sap: seleccionado.codigo_sap,
       cantidad_solicitada: cantidad,
+      prioridad: prioridad || null,
       estado: 'pendiente',
       creado_por: session?.user.id
     });
@@ -214,7 +240,12 @@ export default function ReenvasadoPage() {
             <Pill color="white" size={26} />
           </div>
           <div>
-            <h1 style={{ fontSize: '1.1rem', fontWeight: 900, margin: 0, color: '#0f172a' }}>Reenvasado HUCA</h1>
+            <h1 style={{ fontSize: '1.1rem', fontWeight: 900, margin: 0, color: '#0f172a', lineHeight: 1.2 }}>
+              Reenvasado de Medicamentos.
+            </h1>
+            <div style={{ color: '#64748b', fontSize: '0.95rem', fontWeight: 600, marginTop: 2 }}>
+              Servicio de Farmacia. Hospital Universitario de Cabueñes
+            </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
               <User size={12} color={userRol === 'farmaceutico' ? '#f59e0b' : '#0ea5e9'} />
               <span style={{ fontSize: '0.7rem', fontWeight: 700, color: userRol === 'farmaceutico' ? '#f59e0b' : '#0ea5e9', textTransform: 'uppercase' }}>
@@ -237,16 +268,50 @@ export default function ReenvasadoPage() {
         </h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
           {tareasPendientes.map(t => (
-            <div key={t.id} style={{ background: 'white', padding: '1.2rem', borderRadius: '15px', border: tareaActiva?.id === t.id ? '2px solid #0ea5e9' : '1px solid #e2e8f0', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
-              <div style={{ fontWeight: 800, fontSize: '1rem', marginBottom: 8, color: '#0f172a' }}>{t.medicamentos.nombre_medicamento}</div>
+            <div key={t.id} style={{ background: 'white', padding: '1.2rem', borderRadius: '15px', border: tareaActiva?.id === t.id ? '2px solid #0ea5e9' : '1px solid #e2e8f0', boxShadow: '0 2px 5px rgba(0,0,0,0.05)', position: 'relative' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                <div style={{ fontWeight: 800, fontSize: '1rem', color: '#0f172a', flex: 1 }}>{t.medicamentos.nombre_medicamento}</div>
+              </div>
+              {(userRol === 'farmaceutico' || userRol === 'admin') && (
+                <>
+                  <div style={{ fontSize: '0.85rem', color: '#334155', marginBottom: 2 }}>
+                    <span style={{ fontWeight: 600 }}>Principio activo:</span> {t.medicamentos.principio_activo || '-'}
+                  </div>
+                  <div style={{ fontSize: '0.85rem', color: '#334155', marginBottom: 2 }}>
+                    <span style={{ fontWeight: 600 }}>Ubicación:</span> {t.medicamentos.ubicacion || '-'}
+                  </div>
+                  <div style={{ fontSize: '0.85rem', color: '#334155', marginBottom: 6 }}>
+                    <span style={{ fontWeight: 600 }}>Código agrup:</span> {t.medicamentos.codigo_agrup || '-'}
+                  </div>
+                </>
+              )}
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5, background: '#f0f9ff', color: '#0369a1', padding: '4px 8px', borderRadius: '6px', fontSize: '0.75rem', fontWeight: 700, marginBottom: 10 }}>
-                <FlaskConical size={12} />
+                {metodoIcono(t.metodo_visual)}
                 {t.metodo_visual?.toUpperCase()}
               </div>
-              <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Solicitado: <strong>{t.cantidad_solicitada} uds.</strong></div>
+              <div style={{ display: 'flex', alignItems: 'center', fontSize: '0.85rem', color: '#64748b', marginBottom: 8, gap: 8 }}>
+                <span>Solicitado: <strong>{t.cantidad_solicitada} uds.</strong></span>
+                {(t.prioridad === 'urgente' || t.prioridad === 'muy urgente') && (
+                  <span style={{
+                    background: t.prioridad === 'muy urgente' ? '#fee2e2' : '#fef9c3',
+                    color: t.prioridad === 'muy urgente' ? '#dc2626' : '#b45309',
+                    borderRadius: '8px',
+                    padding: '4px 12px',
+                    fontWeight: 800,
+                    fontSize: '0.85rem',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    boxShadow: '0 1px 4px rgba(0,0,0,0.07)'
+                  }}>
+                    {t.prioridad === 'muy urgente' ? '🔥' : '⚡'} {t.prioridad.toUpperCase()}
+                  </span>
+                )}
+              </div>
               <button onClick={() => seleccionarTarea(t)} style={{ marginTop: 12, width: '100%', padding: '10px', borderRadius: '8px', background: '#0ea5e9', color: 'white', border: 'none', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
                 <PlayCircle size={16}/> Cargar Orden
               </button>
+              <button onClick={() => eliminarTarea(t.id)} style={{ position: 'absolute', top: 10, right: 10, background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '6px', padding: '4px 10px', fontWeight: 700, cursor: 'pointer', fontSize: '0.8rem' }}>Eliminar</button>
             </div>
           ))}
           {tareasPendientes.length === 0 && <div style={{ gridColumn: '1/-1', padding: '3rem', textAlign: 'center', color: '#94a3b8', border: '2px dashed #e2e8f0', borderRadius: '15px' }}>No hay tareas programadas</div>}
@@ -272,7 +337,9 @@ export default function ReenvasadoPage() {
               style={{ width: '100%', textAlign: 'left', padding: '1rem', marginBottom: 8, borderRadius: '12px', border: seleccionado?.codigo_sap === m.codigo_sap ? '2px solid #0ea5e9' : '1px solid #e2e8f0', background: 'white', cursor: 'pointer' }}
             >
               <div style={{ fontWeight: 700 }}>{m.nombre_medicamento}</div>
-              <div style={{ fontSize: '0.75rem', opacity: 0.6 }}>SAP: {m.codigo_sap}</div>
+              <div style={{ fontSize: '0.85rem', color: '#64748b', fontWeight: 400 }}>
+                {m.principio_activo || <span style={{ opacity: 0.5 }}>[Sin principio activo]</span>}
+              </div>
             </button>
           ))}
         </section>
@@ -287,10 +354,16 @@ export default function ReenvasadoPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
               <div style={{ fontWeight: 800, color: '#0ea5e9', fontSize: '1.1rem' }}>{seleccionado.nombre_medicamento}</div>
               
-              {userRol === 'farmaceutico' && !tareaActiva ? (
+              {(userRol === 'farmaceutico' || userRol === 'admin') && !tareaActiva ? (
                 <>
                   <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>Cantidad a solicitar</label>
                   <input type="number" value={cantidad} onChange={(e) => setCantidad(Number(e.target.value))} style={{ padding: '12px', borderRadius: '10px', border: '2px solid #f59e0b' }} />
+                  <label style={{ fontSize: '0.85rem', fontWeight: 600, marginTop: 8 }}>Prioridad</label>
+                  <select value={typeof prioridad !== 'undefined' ? prioridad : ''} onChange={e => setPrioridad(e.target.value)} style={{ padding: '12px', borderRadius: '10px', border: '2px solid #f59e0b', marginBottom: 8 }}>
+                    <option value="">-- Rutina ordinaria --</option>
+                    <option value="urgente">Urgente</option>
+                    <option value="muy urgente">Muy urgente</option>
+                  </select>
                   <button onClick={asignarTarea} style={{ background: '#f59e0b', color: 'white', padding: '15px', borderRadius: '10px', border: 'none', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}><SendHorizontal size={18}/> ENVIAR AL TÉCNICO</button>
                 </>
               ) : (
@@ -326,7 +399,7 @@ export default function ReenvasadoPage() {
                   </div>
                   
                   <textarea 
-                    placeholder="MARCA COMERCIAL, CÓDIGO NACIONAL Y OBSERVACIONES" 
+                    placeholder="OBSERVACIONES" 
                     value={incidencias} 
                     onChange={(e) => setIncidencias(e.target.value)} 
                     style={{ 
