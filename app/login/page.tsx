@@ -64,11 +64,11 @@ export default function LoginPage() {
       minHeight: '100vh', 
       display: 'flex', 
       alignItems: 'center', 
+      justifyContent: 'center',
       background: '#f8fafc', 
       fontFamily: 'sans-serif',
       padding: '1rem'
     }}>
-      // ...existing code...
       <div style={{ 
         width: '100%', 
         maxWidth: '420px', 

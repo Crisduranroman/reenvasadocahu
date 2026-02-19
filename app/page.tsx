@@ -53,7 +53,6 @@ export default function RootPage() {
         <div style={{ textAlign: 'center', padding: '3rem', background: 'white', borderRadius: '24px', boxShadow: '0 10px 25px rgba(0,0,0,0.05)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 15 }}>
           <Loader2 size={40} className="animate-spin" color="#0ea5e9" style={{ animation: 'spin 1s linear infinite' }} />
           <div>
-            <h2 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0f172a', margin: 0 }}>Farmacia HUCA</h2>
             <p style={{ fontSize: '0.85rem', color: '#64748b', marginTop: 5 }}>Verificando credenciales...</p>
           </div>
         </div>
