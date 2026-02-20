@@ -92,8 +92,9 @@ export default function LoginPage() {
           <h1 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#0f172a', margin: 0, letterSpacing: '-0.025em', lineHeight: 1.2 }}>
             Reenvasado de Medicamentos
           </h1>
-          <div style={{ color: '#64748b', fontSize: '0.95rem', fontWeight: 600, marginTop: 4 }}>
-            Servicio de Farmacia. Hospital Universitario de Cabueñes
+          <div style={{ color: '#64748b', fontSize: '0.95rem', fontWeight: 600, marginTop: 4, lineHeight: 1.2 }}>
+            <div>Servicio de Farmacia.</div>
+            <div>Hospital Universitario de Cabueñes</div>
           </div>
         </div>
 

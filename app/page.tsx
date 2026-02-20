@@ -115,7 +115,7 @@ export default function RootPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{ background: '#f0f9ff', padding: 8, borderRadius: 10 }}><Package size={20} color="#0ea5e9"/></div>
               <div>
-                <div style={{ fontWeight: 800, color: '#0f172a' }}>Catálogo de Fármacos</div>
+                <div style={{ fontWeight: 800, color: '#0f172a' }}>Catálogo de Medicamentos</div>
                 <div style={{ fontSize: '0.8rem', color: '#64748b' }}>Añadir medicamentos y editar métodos</div>
               </div>
             </div>

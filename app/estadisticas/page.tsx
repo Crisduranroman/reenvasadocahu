@@ -15,10 +15,19 @@ export default function EstadisticasPage() {
   const [registros, setRegistros] = useState<any[]>([]);
   const [filtroDesde, setFiltroDesde] = useState('');
   const [filtroHasta, setFiltroHasta] = useState('');
+  const [userRol, setUserRol] = useState<string>('');
+  const [nombreUsuario, setNombreUsuario] = useState<string>('');
 
   const cargarDatos = async () => {
     setLoading(true);
     try {
+      // Obtener sesión y perfil activo
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const { data: perfilActivo } = await supabase.from('perfiles').select('rol, nombre').eq('user_id', session.user.id).single();
+        setUserRol(perfilActivo?.rol || 'tecnico');
+        setNombreUsuario(perfilActivo?.nombre || 'Usuario');
+      }
       // Leemos directamente de las tablas para evitar fallos de Vistas desactualizadas
       const [respAct, respMeds, respPerf] = await Promise.all([
         supabase.from('actividad_reenvasado').select('*'),
@@ -94,18 +103,38 @@ export default function EstadisticasPage() {
   );
 
   return (
+
     <main style={{ padding: '1rem', fontFamily: 'sans-serif', maxWidth: '1200px', margin: '0 auto', backgroundColor: '#f8fafc', minHeight: '100vh' }}>
-      
-      {/* CABECERA */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', background: 'white', padding: '1.5rem', borderRadius: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: '#0f172a' }}>Estadísticas HUCA</h1>
-          <p style={{ margin: 0, color: '#64748b' }}>Análisis de carga y producción real</p>
+      {/* CABECERA ANÁLOGA A HISTORIAL */}
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', background: 'white', padding: '1rem 1.5rem', borderRadius: '15px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ background: '#0ea5e9', padding: '10px', borderRadius: '12px' }}><BarChart color="white" size={26} /></div>
+          <div>
+            <h1 style={{ fontSize: '1.1rem', fontWeight: 900, margin: 0, color: '#0f172a' }}>Estadísticas de Reenvasado</h1>
+            <div style={{ color: '#64748b', fontSize: '0.95rem', fontWeight: 600, marginTop: 2 }}>
+              Servicio de Farmacia. Hospital Universitario de Cabueñes
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+              <TrendingUp size={12} color="#0ea5e9" />
+              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#0ea5e9', textTransform: 'uppercase' }}>
+                Panel de estadísticas
+              </span>
+            </div>
+            {/* Usuario activo */}
+            {nombreUsuario && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                <Users size={12} color="#10b981" />
+                <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#10b981', textTransform: 'uppercase' }}>
+                  {userRol}: <span style={{ color: '#64748b' }}>{nombreUsuario}</span>
+                </span>
+              </div>
+            )}
+          </div>
         </div>
-        <button onClick={() => router.push('/historial')} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 20px', borderRadius: '12px', border: '1px solid #e2e8f0', background: 'white', fontWeight: 600, cursor: 'pointer' }}>
-          <ArrowLeft size={18} /> Volver al Historial
-        </button>
-      </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={() => router.push('/historial')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'white', color: '#0f172a', border: '1px solid #cbd5e1', padding: '8px 14px', borderRadius: '10px', cursor: 'pointer', fontWeight: 700, fontSize: '0.8rem' }}><ArrowLeft size={16}/> Volver al Historial</button>
+        </div>
+      </header>
 
       {/* TARJETAS DE RESUMEN */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '20px', marginBottom: '2rem' }}>

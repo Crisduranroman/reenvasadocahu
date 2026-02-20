@@ -99,7 +99,14 @@ export default function HistorialPage() {
     if (fMetodo) temp = temp.filter(r => Number(r.metodo_id) === Number(fMetodo));
     if (fMed) {
       const q = fMed.toLowerCase();
-      temp = temp.filter(r => r.nombre_med.toLowerCase().includes(q) || String(r.codigo_sap).includes(q) || (r.incidencias && r.incidencias.toLowerCase().includes(q)));
+      temp = temp.filter(r =>
+        (r.nombre_med && r.nombre_med.toLowerCase().includes(q)) ||
+        (r.principio_activo && r.principio_activo.toLowerCase().includes(q)) ||
+        (r.codigo_nacional && String(r.codigo_nacional).toLowerCase().includes(q)) ||
+        (r.codigo_agrup && String(r.codigo_agrup).toLowerCase().includes(q)) ||
+        (r.lote_original && r.lote_original.toLowerCase().includes(q)) ||
+        (r.incidencias && r.incidencias.toLowerCase().includes(q))
+      );
     }
     if (fDesde) temp = temp.filter(r => new Date(r.fecha) >= new Date(fDesde));
     if (fHasta) {
@@ -112,14 +119,35 @@ export default function HistorialPage() {
 
   const exportarExcel = () => {
     if (registrosFiltrados.length === 0) return alert("No hay datos para exportar.");
-    const cabeceras = ["ID", "Fecha", "Hora", "SAP", "Medicamento", "Método", "Técnico", "Lote", "Cad. Original", "Cad. Reenvasado", "Cant. Inicial", "Cant. Final", "Estado", "MARCA/CN/OBSERVACIONES", "Validado Por"];
+    const cabeceras = [
+      "ID", "Fecha", "Hora", "SAP", "Medicamento", "Método", "Técnico", "Lote", "Cad. Original", "Cad. Reenvasado", "Cant. Inicial", "Cant. Final", "Estado", "Ubicación", "Excipientes", "MARCA/CN/OBSERVACIONES", "Validado Por", "Usuario que creó", "Fecha validación", "Hora validación", "Código Nacional", "Código Agrupado"
+    ];
     const filas = registrosFiltrados.map(reg => {
       const fecha = new Date(reg.fecha);
+      const fechaValid = reg.fecha_validacion ? new Date(reg.fecha_validacion) : null;
       return [
-        reg.id, fecha.toLocaleDateString(), fecha.toLocaleTimeString(), 
-        reg.codigo_sap, reg.nombre_med?.replace(/,/g, ' '), reg.nombre_metodo, reg.nombre_tecnico,
-        reg.lote_original, reg.caducidad_original, reg.caducidad_reenvasado, 
-        reg.cantidad, reg.cantidad_final, reg.estado, reg.incidencias?.replace(/,/g, ' ') || '', reg.nombre_validador || 'Pendiente'
+        reg.id,
+        fecha.toLocaleDateString(),
+        fecha.toLocaleTimeString(),
+        reg.codigo_sap,
+        reg.nombre_med?.replace(/,/g, ' '),
+        reg.nombre_metodo,
+        reg.nombre_tecnico,
+        reg.lote_original,
+        reg.caducidad_original,
+        reg.caducidad_reenvasado,
+        reg.cantidad,
+        reg.cantidad_final,
+        reg.estado,
+        reg.ubicacion || '',
+        reg.excipientes || '',
+        reg.incidencias?.replace(/,/g, ' ') || '',
+        reg.nombre_validador || 'Pendiente',
+        reg.user_id || '',
+        fechaValid ? fechaValid.toLocaleDateString() : '',
+        fechaValid ? fechaValid.toLocaleTimeString() : '',
+        reg.codigo_nacional || '',
+        reg.codigo_agrup || ''
       ].join(",");
     });
     const csvContent = "\uFEFF" + [cabeceras.join(","), ...filas].join("\n");
@@ -127,7 +155,7 @@ export default function HistorialPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.setAttribute("download", `Reporte_HUCA_${new Date().toISOString().slice(0,10)}.csv`);
+    link.setAttribute("download", `Reporte_Reenvasado_${new Date().toISOString().slice(0,10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -189,10 +217,10 @@ export default function HistorialPage() {
           {/* FILTROS */}
           <div style={{ background: 'white', padding: '1.2rem', borderRadius: '15px', marginBottom: '1.5rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, border: '1px solid #e2e8f0' }}>
             <div style={{gridColumn: 'span 2'}}>
-                <label style={{fontSize: '0.7rem', fontWeight: 700, color: '#64748b', marginBottom: 4, display: 'block' }}>Buscar Fármaco o Marca</label>
+                <label style={{fontSize: '0.7rem', fontWeight: 700, color: '#64748b', marginBottom: 4, display: 'block' }}>Buscar Fármaco, CN, Agrup, Marca o Lote</label>
                 <div style={{position:'relative'}}>
                    <Search size={16} style={{position:'absolute', left:10, top:10, color:'#94a3b8'}}/>
-                   <input placeholder="Nombre, SAP o Marca..." value={fMed} onChange={e => setFMed(e.target.value)} style={{width:'100%', padding:'8px 8px 8px 32px', borderRadius:8, border:'1px solid #cbd5e1'}} />
+                   <input placeholder="Nombre, CN, Agrup, Marca o Lote..." value={fMed} onChange={e => setFMed(e.target.value)} style={{width:'100%', padding:'8px 8px 8px 32px', borderRadius:8, border:'1px solid #cbd5e1'}} />
                 </div>
             </div>
             <div>
@@ -222,7 +250,7 @@ export default function HistorialPage() {
                   <th style={{ padding: '1rem' }}>MEDICAMENTO / MARCA / CN</th>
                   <th style={{ padding: '1rem' }}>DETALLES TÉCNICOS</th>
                   <th style={{ padding: '1rem' }}>TÉCNICO / FECHA</th>
-                  <th style={{ padding: '1rem', textAlign: 'center' }}>ACCIÓN</th>
+                  <th style={{ padding: '1rem', textAlign: 'center' }}>VALIDACIÓN</th>
                 </tr>
               </thead>
               <tbody style={{ fontSize: '0.8rem' }}>
@@ -233,8 +261,10 @@ export default function HistorialPage() {
                       <div style={{ fontSize: '0.8rem', color: '#334155', fontWeight: 400, marginTop: 2 }}>
                         {reg.principio_activo && <span>{reg.principio_activo}</span>}
                         {reg.codigo_agrup && <span style={{marginLeft:8, color:'#0ea5e9'}}>Agrup: {reg.codigo_agrup}</span>}
-                        {reg.codigo_nacional && <span style={{marginLeft:8, color:'#0ea5e9'}}>CN: {reg.codigo_nacional}</span>}
                       </div>
+                      {reg.codigo_nacional && (
+                        <div style={{ fontSize: '0.8rem', color: '#0ea5e9', fontWeight: 600, marginTop: 2 }}>CN: {reg.codigo_nacional}</div>
+                      )}
                       <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 2 }}>
                         Lote: <strong>{reg.lote_original || '-'}</strong>
                       </div>
@@ -243,11 +273,16 @@ export default function HistorialPage() {
                       </div>
                     </td>
                     <td style={{ padding: '1rem', verticalAlign: 'top' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'auto auto auto', gap: '8px 12px', alignItems: 'center', fontSize: '0.75rem' }}>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{color: '#64748b'}}>Cantidades:</span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                           {reg.cantidad} <ArrowRight size={12} color="#94a3b8"/> <strong>{reg.cantidad_final} uds</strong>
-                        </div>
+                          <span style={{marginLeft:8, color:'#0ea5e9', fontWeight:600}}>
+                            (dif. {typeof reg.cantidad === 'number' && typeof reg.cantidad_final === 'number' ? Math.abs(reg.cantidad - reg.cantidad_final) : Math.abs(Number(reg.cantidad) - Number(reg.cantidad_final))})
+                          </span>
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{color: '#64748b'}}>Método:</span>
                         <span style={{fontWeight: 700, color: '#475569'}}>{reg.nombre_metodo}</span>
                       </div>
@@ -262,9 +297,11 @@ export default function HistorialPage() {
                         <Calendar size={12} /> {fmtFecha(reg.fecha)} {reg.fecha && (<span style={{marginLeft:4}}>{new Date(reg.fecha).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}</span>)}
                       </div>
                     </td>
-                    <td style={{ padding: '1rem', textAlign: 'center', verticalAlign: 'middle' }}>
+                    <td style={{ padding: '1rem', textAlign: 'center', verticalAlign: 'top' }}>
                       {(userRol === 'farmaceutico' || userRol === 'admin') && reg.estado === 'pendiente' ? (
-                        <button onClick={() => setEditando({...reg})} style={{ background: '#f59e0b', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 700, fontSize: '0.75rem' }}>VALIDAR</button>
+                        <button onClick={() => setEditando({...reg, modo: 'validar'})} style={{ background: '#f59e0b', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 700, fontSize: '0.75rem' }}>VALIDAR</button>
+                      ) : userRol === 'tecnico' && reg.estado === 'pendiente' ? (
+                        <button onClick={() => setEditando({...reg, modo: 'editar'})} style={{ background: '#0ea5e9', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 700, fontSize: '0.75rem' }}>EDITAR</button>
                       ) : reg.estado === 'validado' ? (
                         <div style={{display:'flex', flexDirection:'column', alignItems:'center'}}>
                             <div style={{display:'flex', alignItems:'center', gap:4, color:'#10b981', fontWeight:700}}><CheckCircle2 size={18} /> OK</div>
@@ -285,7 +322,10 @@ export default function HistorialPage() {
           {editando && (
             <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(2px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 100, padding: 10 }}>
               <div style={{ background: 'white', padding: '2rem', borderRadius: '20px', width: '100%', maxWidth: '500px' }}>
-                <h3 style={{ marginTop: 0, display:'flex', alignItems:'center', gap:10 }}><Package color="#f59e0b"/> Supervisión Farmacéutica</h3>
+                <h3 style={{ marginTop: 0, display:'flex', alignItems:'center', gap:10 }}>
+                  <Package color="#f59e0b"/>
+                  {editando.modo === 'validar' ? 'Supervisión Farmacéutica' : 'Editar tarea de reenvasado'}
+                </h3>
                 <div style={{ background: '#f8fafc', padding: '12px', borderRadius: '10px', marginBottom: 20 }}>
                     <div style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 700 }}>MEDICAMENTO:</div>
                     <div style={{ fontWeight: 800, color: '#0f172a' }}>{editando.nombre_med}</div>
@@ -306,7 +346,24 @@ export default function HistorialPage() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 12, marginTop: 25 }}>
-                  <button onClick={guardarValidacion} style={{ flex: 1, background: '#10b981', color: 'white', padding: '14px', borderRadius: '12px', border: 'none', fontWeight: 800, cursor: 'pointer' }}>VALIDAR REENVASADO</button>
+                  {editando.modo === 'validar' ? (
+                    <button onClick={guardarValidacion} style={{ flex: 1, background: '#10b981', color: 'white', padding: '14px', borderRadius: '12px', border: 'none', fontWeight: 800, cursor: 'pointer' }}>VALIDAR REENVASADO</button>
+                  ) : (
+                    <button onClick={async () => {
+                      // Guardar cambios como técnico (sin validar)
+                      const { data: { session } } = await supabase!.auth.getSession();
+                      const { error } = await supabase!.from('actividad_reenvasado').update({
+                        cantidad: Number(editando.cantidad),
+                        cantidad_final: Number(editando.cantidad_final),
+                        lote_original: editando.lote_original.toUpperCase(),
+                        caducidad_original: editando.caducidad_original,
+                        caducidad_reenvasado: editando.caducidad_reenvasado,
+                        incidencias: editando.incidencias
+                      }).eq('id', editando.id);
+                      if (!error) { setEditando(null); cargarDatos(); }
+                      else { alert("Error: " + error.message); }
+                    }} style={{ flex: 1, background: '#0ea5e9', color: 'white', padding: '14px', borderRadius: '12px', border: 'none', fontWeight: 800, cursor: 'pointer' }}>GUARDAR CAMBIOS</button>
+                  )}
                   <button onClick={() => setEditando(null)} style={{ flex: 0.5, background: '#f1f5f9', color: '#64748b', padding: '14px', borderRadius: '12px', border: 'none', cursor: 'pointer', fontWeight: 600 }}>Cancelar</button>
                 </div>
               </div>

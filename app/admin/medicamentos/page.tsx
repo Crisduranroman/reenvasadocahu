@@ -2,7 +2,16 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { Pill, Plus, Save, ArrowLeft, Search, FlaskConical, Hash, Edit3, X, Trash2, Power } from 'lucide-react';
+import { Pill, Plus, Save, ArrowLeft, Search, FlaskConical, Hash, Edit3, X, Trash2, Power, CalendarClock, Tablets } from 'lucide-react';
+// Devuelve el icono adecuado según el tipo de reenvasado
+function iconoMetodo(tipo: string | undefined) {
+  if (!tipo) return <FlaskConical size={14} style={{verticalAlign:'middle', marginRight:4}}/>;
+  const t = tipo.toLowerCase();
+  if (t.includes('sin blister')) return <Pill size={16} style={{verticalAlign:'middle', marginRight:4}}/>;
+  if (t.includes('blister')) return <Tablets size={16} style={{verticalAlign:'middle', marginRight:4}}/>;
+  if (t.includes('3 meses') || t.includes('tres meses')) return <CalendarClock size={16} style={{verticalAlign:'middle', marginRight:4}}/>;
+  return <FlaskConical size={14} style={{verticalAlign:'middle', marginRight:4}}/>;
+}
 import { useRouter } from 'next/navigation';
 
 export default function GestionMedicamentos() {
@@ -71,24 +80,33 @@ export default function GestionMedicamentos() {
       }
 
       // 1. Upsert medicamento (incluyendo el estado activo y nuevos campos)
-      // Solo enviar codigo_sap si es un número válido y nunca como string vacío
-      const { error: err1 } = await supabase.from('medicamentos').upsert({
+      const payload = {
         codigo_sap: codigoSapNum,
         nombre_medicamento: form.nombre_medicamento,
-        principio_activo: form.principio_activo,
-        excipientes: form.excipientes,
-        codigo_nacional: form.codigo_nacional,
-        codigo_agrup: form.codigo_agrup,
-        ubicacion: form.ubicacion,
-        activo: form.activo 
-      });
+        principio_activo: form.principio_activo?.trim() ? form.principio_activo : null,
+        excipientes: form.excipientes?.trim() ? form.excipientes : null,
+        codigo_nacional: form.codigo_nacional?.trim() ? form.codigo_nacional : null,
+        codigo_agrup: form.codigo_agrup?.trim() ? form.codigo_agrup : null,
+        ubicacion: form.ubicacion?.trim() ? form.ubicacion : null,
+        activo: form.activo,
+      };
+
+      const { error: err1 } = await supabase
+        .from('medicamentos')
+        .upsert(payload);
 
       if (err1) throw err1;
 
       // 2. Vincular método
-      await supabase.from('medicamento_metodo').delete().eq('codigo_sap', Number(form.codigo_sap));
+      const { error: delErr } = await supabase
+        .from('medicamento_metodo')
+        .delete()
+        .eq('codigo_sap', codigoSapNum);
+
+      if (delErr) throw delErr;
+
       const { error: err2 } = await supabase.from('medicamento_metodo').insert({
-        codigo_sap: Number(form.codigo_sap),
+        codigo_sap: codigoSapNum,
         metodo_id: Number(form.metodo_id)
       });
 
@@ -128,36 +146,70 @@ export default function GestionMedicamentos() {
   );
 
   return (
-    <main style={{ padding: '2rem', fontFamily: 'Inter, system-ui, sans-serif', maxWidth: '1000px', margin: '0 auto', background: '#f8fafc', minHeight: '100vh' }}>
+    <main style={{ padding: '2rem', fontFamily: 'Inter, system-ui, sans-serif', maxWidth: '1000px', margin: '0 auto', background: '#f8fafc', minHeight: '100vh', position: 'relative' }}>
+            {/* Botón flotante para añadir nuevo medicamento */}
+            <button
+              onClick={() => {
+                setIsEditing(false);
+                setForm({
+                  codigo_sap: '',
+                  nombre_medicamento: '',
+                  principio_activo: '',
+                  excipientes: '',
+                  codigo_nacional: '',
+                  codigo_agrup: '',
+                  ubicacion: '',
+                  metodo_id: '',
+                  activo: true
+                });
+                setModalOpen(true);
+              }}
+              title="Añadir nuevo medicamento"
+              style={{
+                position: 'fixed',
+                bottom: 36,
+                right: 36,
+                zIndex: 200,
+                background: '#0ea5e9',
+                color: 'white',
+                border: 'none',
+                borderRadius: '50%',
+                width: 64,
+                height: 64,
+                boxShadow: '0 4px 16px #0ea5e93a',
+                fontSize: 32,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'background 0.2s',
+              }}
+            >
+              <Plus size={36} />
+            </button>
       
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
-        <div>
-          <button onClick={() => router.push('/')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontWeight: 600, fontSize: '0.9rem', marginBottom: 8 }}>
-            <ArrowLeft size={16}/> Volver al Panel
-          </button>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 900, color: '#0f172a', margin: 0 }}>Gestión del Catálogo</h1>
-          <span style={{ fontSize: '0.95rem', color: '#64748b', fontWeight: 500, display: 'block', marginTop: 4 }}>Servicio de Farmacia. Hospital Universitario de Cabueñes</span>
+      <header style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'white', borderRadius: '18px', boxShadow: '0 2px 8px #e2e8f0', padding: '1.5rem 2.5rem', marginBottom: '2.5rem', minHeight: 80 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
+          <div style={{ background: '#0ea5e9', borderRadius: '14px', width: 54, height: 54, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Pill size={30} color='white' />
+          </div>
+          <div>
+            <div style={{ fontWeight: 900, fontSize: '1.35rem', color: '#0f172a', marginBottom: 2 }}>Catálogo de Medicamentos</div>
+            <div style={{ fontSize: '1rem', color: '#64748b', fontWeight: 500, marginBottom: 2 }}>Servicio de Farmacia. Hospital Universitario de Cabueñes</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+              <span style={{ color: '#0ea5e9', fontWeight: 900, fontSize: '0.93rem', letterSpacing: 0.2, display: 'flex', alignItems: 'center' }}>
+                <svg width="16" height="16" fill="none" stroke="#0ea5e9" strokeWidth="2" style={{marginRight:3}} viewBox="0 0 24 24"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a7.5 7.5 0 0 1 13 0"/></svg>
+                ADMIN:
+              </span>
+              <span style={{ color: '#334155', fontWeight: 700, fontSize: '0.93rem', letterSpacing: 0.1 }}>CRISTINA DURÁN ROMÁN</span>
+            </div>
+          </div>
         </div>
-        <button 
-          onClick={() => { 
-            setIsEditing(false);
-            setForm({
-              codigo_sap:'',
-              nombre_medicamento:'',
-              principio_activo:'',
-              excipientes:'',
-              codigo_nacional:'',
-              codigo_agrup:'',
-              ubicacion:'',
-              metodo_id:'',
-              activo: true
-            });
-            setModalOpen(true); 
-          }}
-          style={{ background: '#0ea5e9', color: 'white', padding: '14px 24px', borderRadius: '16px', border: 'none', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
-        >
-          <Plus size={20}/> Nuevo Medicamento
-        </button>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button onClick={() => router.push('/')} style={{ display: 'flex', alignItems: 'center', gap: 6, border: '1.5px solid #e2e8f0', background: 'white', color: '#334155', fontWeight: 700, borderRadius: 12, padding: '10px 18px', fontSize: '1rem', cursor: 'pointer' }}>
+            <ArrowLeft size={18} style={{ marginRight: 4 }} /> Volver al Panel
+          </button>
+        </div>
       </header>
 
       <div style={{ position: 'relative', marginBottom: '2rem' }}>
@@ -174,34 +226,55 @@ export default function GestionMedicamentos() {
         {loading ? (
           <div style={{ padding: '4rem', textAlign: 'center', color: '#64748b' }}>Cargando...</div>
         ) : medsFiltrados.map(med => (
-          <div key={med.codigo_sap} style={{ background: 'white', padding: '1.5rem', borderRadius: '20px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', opacity: med.activo ? 1 : 0.6 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 15 }}>
-              <div style={{ background: med.activo ? '#f0f9ff' : '#f1f5f9', padding: '12px', borderRadius: '14px' }}>
+          <div key={med.codigo_sap} style={{ background: 'white', padding: '1.5rem', borderRadius: '20px', border: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'stretch', opacity: med.activo ? 1 : 0.6 }}>
+            <div style={{ display: 'flex', alignItems: 'stretch', gap: 15, flex: 1 }}>
+              <div style={{ background: med.activo ? '#f0f9ff' : '#f1f5f9', padding: '12px', borderRadius: '14px', height: 'fit-content', marginRight: 12 }}>
                 <Pill size={24} color={med.activo ? '#0ea5e9' : '#94a3b8'}/>
               </div>
-              <div>
+              {/* 1ª columna: Nombre comercial y principio activo */}
+              <div style={{ flex: 2, display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 180 }}>
                 <div style={{ fontWeight: 800, color: '#1e293b', fontSize: '1.05rem' }}>
-                    {med.nombre_medicamento} {!med.activo && <span style={{fontSize:'0.7rem', color:'#ef4444', background:'#fee2e2', padding:'2px 8px', borderRadius:10, marginLeft:8}}>DESACTIVADO</span>}
+                  {med.nombre_medicamento} {!med.activo && <span style={{fontSize:'0.7rem', color:'#ef4444', background:'#fee2e2', padding:'2px 8px', borderRadius:10, marginLeft:8}}>DESACTIVADO</span>}
                 </div>
-                <div style={{ display: 'flex', gap: 15, alignItems: 'center', marginTop: 4 }}>
-                  <span style={{ fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>SAP: {med.codigo_sap}</span>
-                  <span style={{ fontSize: '0.8rem', color: '#0ea5e9', fontWeight: 700 }}>
-                    <FlaskConical size={14} style={{verticalAlign:'middle', marginRight:4}}/> 
-                    {med.medicamento_metodo?.[0]?.metodo_reenvasado?.tipo_reenvasado || 'Sin asignar'}
-                  </span>
+                {med.principio_activo && (
+                  <div style={{ fontSize: '0.8rem', color: '#334155', fontWeight: 600, marginTop: 2 }}>{med.principio_activo}</div>
+                )}
+              </div>
+              {/* 2ª columna: Cód. Nacional y Cód. Agrup */}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 120 }}>
+                {med.codigo_nacional && (
+                  <div style={{ fontSize: '0.8rem', color: '#334155', fontWeight: 600, marginBottom: 4 }}>CN: {med.codigo_nacional}</div>
+                )}
+                {med.codigo_agrup && (
+                  <div style={{ fontSize: '0.8rem', color: '#334155', fontWeight: 600 }}>Cód. Agrup: {med.codigo_agrup}</div>
+                )}
+              </div>
+              {/* 3ª columna: Ubicación y excipientes */}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minWidth: 120 }}>
+                {med.ubicacion && (
+                  <div style={{ fontSize: '0.8rem', color: '#334155', fontWeight: 600, marginBottom: 4 }}>Ubicación: {med.ubicacion}</div>
+                )}
+                {med.excipientes && (
+                  <div style={{ fontSize: '0.8rem', color: '#334155', fontWeight: 600 }}>Excipientes: {med.excipientes}</div>
+                )}
+              </div>
+              {/* 4ª columna: Método de reenvasado */}
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'flex-end', minWidth: 120 }}>
+                <div style={{ fontSize: '0.8rem', color: '#0ea5e9', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                  {iconoMetodo(med.medicamento_metodo?.[0]?.metodo_reenvasado?.tipo_reenvasado)}
+                  {med.medicamento_metodo?.[0]?.metodo_reenvasado?.tipo_reenvasado || 'Sin asignar'}
                 </div>
               </div>
             </div>
-            
             <div style={{ display: 'flex', gap: 10 }}>
-                <button 
+              <button 
                 onClick={() => toggleEstado(med)}
                 title={med.activo ? "Desactivar" : "Activar"}
                 style={{ padding: '10px', borderRadius: '12px', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', color: med.activo ? '#ef4444' : '#10b981' }}
-                >
+              >
                 <Power size={18}/>
-                </button>
-                <button 
+              </button>
+              <button 
                 onClick={() => {
                   if (!med.codigo_sap || isNaN(Number(med.codigo_sap)) || Number(med.codigo_sap) <= 0) {
                     alert('Error: el medicamento no tiene un código SAP válido. No se puede editar.');
@@ -213,18 +286,18 @@ export default function GestionMedicamentos() {
                     nombre_medicamento: med.nombre_medicamento,
                     principio_activo: med.principio_activo || '',
                     excipientes: med.excipientes || '',
-                    codigo_nacional: med.codigo_nacional || '',
-                    codigo_agrup: med.codigo_agrup || '',
-                    ubicacion: med.ubicacion || '',
+                    codigo_nacional: med.codigo_nacional !== undefined && med.codigo_nacional !== null ? String(med.codigo_nacional) : '',
+                    codigo_agrup: med.codigo_agrup !== undefined && med.codigo_agrup !== null ? String(med.codigo_agrup) : '',
+                    ubicacion: med.ubicacion !== undefined && med.ubicacion !== null ? String(med.ubicacion) : '',
                     metodo_id: String(med.medicamento_metodo?.[0]?.metodo_id || ''),
                     activo: med.activo
                   });
                   setModalOpen(true);
                 }}
                 style={{ padding: '10px 18px', borderRadius: '12px', border: '1px solid #e2e8f0', background: '#f8fafc', color: '#475569', fontWeight: 700, cursor: 'pointer', fontSize: '0.85rem' }}
-                >
+              >
                 <Edit3 size={16} style={{verticalAlign:'middle', marginRight:6}}/> Editar
-                </button>
+              </button>
             </div>
           </div>
         ))}

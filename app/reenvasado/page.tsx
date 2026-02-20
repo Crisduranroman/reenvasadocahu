@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabaseClient';
 import { 
   Pill, ClipboardList, LogOut, Search, 
   Beaker, ListChecks, PlayCircle, AlertCircle, SendHorizontal, BarChart3,
-  FlaskConical, User 
+  FlaskConical, User, ArrowLeft 
 } from 'lucide-react';
 
 // Asocia cada método de reenvasado a un icono de Lucide
@@ -255,6 +255,9 @@ export default function ReenvasadoPage() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => router.push('/admin')} style={{ padding: '10px 15px', borderRadius: '10px', border: '1.5px solid #0ea5e9', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: '0.9rem', color: '#0ea5e9' }}>
+            <ArrowLeft size={18} style={{ marginRight: 4 }} /> Volver al Panel
+          </button>
           <button onClick={() => router.push('/estadisticas')} style={{ padding: '10px 15px', borderRadius: '10px', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: '0.8rem', color: '#475569' }}><BarChart3 size={18}/> Estadísticas</button>
           <button onClick={() => router.push('/historial')} style={{ padding: '10px 15px', borderRadius: '10px', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontWeight: 700, fontSize: '0.8rem', color: '#475569' }}><ClipboardList size={18}/> Historial</button>
           <button onClick={async () => { await supabase.auth.signOut(); router.replace('/login'); }} style={{ padding: '10px', borderRadius: '10px', background: '#fee2e2', color: '#ef4444', border: 'none', cursor: 'pointer' }}><LogOut size={18}/></button>

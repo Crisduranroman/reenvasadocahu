@@ -15,9 +15,11 @@ export default function AdminPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [usuarios, setUsuarios] = useState<any[]>([]);
-  const [emails, setEmails] = useState<{ [userId: string]: string }>({});
   const [isAdmin, setIsAdmin] = useState(false);
   const [passwordModal, setPasswordModal] = useState<{ open: boolean, userId: string, email: string } | null>(null);
+
+  // Filtro de búsqueda
+  const [filtro, setFiltro] = useState('');
 
   // Estados para el Modal de Nuevo Usuario
   const [modalOpen, setModalOpen] = useState(false);
@@ -69,25 +71,12 @@ export default function AdminPage() {
     setLoading(true);
     const { data, error } = await supabase
       .from('perfiles')
-      .select('*')
+      .select('user_id, nombre, rol, activo, email')
       .order('nombre', { ascending: true });
 
     if (error) console.error("Error:", error);
     else {
       setUsuarios(data || []);
-      // Obtener emails reales de Auth para cada usuario
-      const emailMap: { [userId: string]: string } = {};
-      if (data && Array.isArray(data)) {
-        await Promise.all(data.map(async (u: any) => {
-          if (u.user_id) {
-            const { data: userData } = await supabase.auth.admin.getUserById(u.user_id);
-            if (userData?.user?.email) {
-              emailMap[u.user_id] = userData.user.email;
-            }
-          }
-        }));
-      }
-      setEmails(emailMap);
     }
     setLoading(false);
   };
@@ -165,6 +154,16 @@ export default function AdminPage() {
 
   if (!isAdmin) return null;
 
+  // --- FILTRO USUARIOS (nombre o email) ---
+  const term = (filtro ?? '').trim().toLowerCase();
+  const usuariosFiltrados = !term
+    ? usuarios
+    : usuarios.filter((u: any) => {
+        const nombre = (u.nombre ?? '').toLowerCase();
+        const email = (u.email ?? '').toLowerCase();
+        return nombre.includes(term) || email.includes(term);
+      });
+
   return (
     <main style={{ padding: '2rem', maxWidth: '1000px', margin: '0 auto', fontFamily: 'sans-serif', background: '#f8fafc', minHeight: '100vh' }}>
       
@@ -172,8 +171,15 @@ export default function AdminPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ background: '#f59e0b', padding: '10px', borderRadius: '12px' }}><Shield color="white" /></div>
           <div>
-            <h1 style={{ fontSize: '1.2rem', fontWeight: 900, margin: 0 }}>Panel de Administración</h1>
-            <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Gestión de Usuarios. Servicio de Farmacia. Hospital Universitario de Cabueñes</span>
+            <h1 style={{ fontSize: '1.2rem', fontWeight: 900, margin: 0 }}>Gestión de Usuarios</h1>
+            <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Servicio de Farmacia. Hospital Universitario de Cabueñes</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+              <span style={{ color: '#f59e0b', fontWeight: 900, fontSize: '0.93rem', letterSpacing: 0.2, display: 'flex', alignItems: 'center' }}>
+                <svg width="16" height="16" fill="none" stroke="#f59e0b" strokeWidth="2" style={{marginRight:3}} viewBox="0 0 24 24"><circle cx="12" cy="7" r="4"/><path d="M5.5 21a7.5 7.5 0 0 1 13 0"/></svg>
+                ADMIN:
+              </span>
+              <span style={{ color: '#fff', fontWeight: 700, fontSize: '0.93rem', letterSpacing: 0.1 }}>CRISTINA DURÁN ROMÁN</span>
+            </div>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
@@ -190,9 +196,18 @@ export default function AdminPage() {
       </header>
 
       <div style={{ background: 'white', borderRadius: '15px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 2px 5px rgba(0,0,0,0.05)' }}>
-        <div style={{ padding: '1.5rem', borderBottom: '1px solid #f1f5f9', display:'flex', alignItems:'center', gap:10 }}>
+        <div style={{ padding: '1.5rem', borderBottom: '1px solid #f1f5f9', display:'flex', alignItems:'center', gap:10, justifyContent:'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap:10 }}>
             <Users size={20} color="#64748b"/>
-            <h3 style={{ margin: 0, color:'#334155' }}>Usuarios Registrados ({usuarios.length})</h3>
+            <h3 style={{ margin: 0, color:'#334155' }}>Usuarios Registrados ({usuariosFiltrados.length})</h3>
+          </div>
+          <input
+            type="text"
+            placeholder="Buscar por nombre o email..."
+            value={filtro}
+            onChange={e => setFiltro(e.target.value)}
+            style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #e2e8f0', fontSize: '1rem', minWidth: 220 }}
+          />
         </div>
         
         <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
@@ -205,15 +220,20 @@ export default function AdminPage() {
             </tr>
           </thead>
           <tbody style={{ fontSize: '0.9rem' }}>
-            {usuarios.map((u) => (
+            {usuariosFiltrados.map((u) => (
               <tr key={u.user_id} style={{ borderTop: '1px solid #f1f5f9', opacity: u.activo === false ? 0.6 : 1 }}>
                 <td style={{ padding: '1.2rem' }}>
                   <div style={{ fontWeight: 700, color: '#0f172a' }}>{u.nombre}</div>
-                  {emails[u.user_id] && (
-                    <div style={{ fontSize: '0.8rem', color: '#0284c7', fontFamily:'monospace', marginTop: 2 }}>
-                      {emails[u.user_id]}
-                    </div>
-                  )}
+                  <div
+                    style={{
+                      fontSize: '0.75rem',
+                      color: '#64748b',
+                      marginTop: 2,
+                      fontWeight: 500
+                    }}
+                  >
+                    {u.email || '-'}
+                  </div>
                 </td>
                 
                 <td style={{ padding: '1.2rem' }}>
