@@ -12,12 +12,11 @@ import {
 // Asocia cada método de reenvasado a un icono de Lucide
 const metodoIcono = (metodo) => {
   if (!metodo) return <FlaskConical size={12} />;
-  const tipo = metodo.toLowerCase();
-  if (tipo.includes('sin blister')) return <FlaskConical size={12} />;
-  if (tipo.includes('blister')) return <Pill size={12} />;
-  if (tipo.includes('estándar') || tipo.includes('estandar')) return <Beaker size={12} />;
-  if (tipo.includes('manual')) return <ClipboardList size={12} />;
-  return <FlaskConical size={12} />;
+  const t = metodo.toLowerCase();
+  if (t.includes('sin blister')) return <Pill size={16} style={{verticalAlign:'middle', marginRight:4}}/>;
+  if (t.includes('blister')) return <Tablets size={16} style={{verticalAlign:'middle', marginRight:4}}/>;
+  if (t.includes('3 meses') || t.includes('tres meses')) return <CalendarClock size={16} style={{verticalAlign:'middle', marginRight:4}}/>;
+  return <FlaskConical size={14} style={{verticalAlign:'middle', marginRight:4}}/>;
 };
 
 type Medicamento = {
@@ -33,6 +32,10 @@ type Medicamento = {
 export default function ReenvasadoPage() {
     // ...existing code...
     const eliminarTarea = async (id: string) => {
+      if (userRol !== 'admin' && userRol !== 'farmaceutico') {
+        alert('Solo el administrador o el farmacéutico pueden eliminar tareas.');
+        return;
+      }
       if (!window.confirm('¿Seguro que deseas eliminar esta tarea?')) return;
       const { error } = await supabase.from('tareas_reenvasado').delete().eq('id', id);
       if (error) return alert('Error al eliminar: ' + error.message);
@@ -314,7 +317,9 @@ export default function ReenvasadoPage() {
               <button onClick={() => seleccionarTarea(t)} style={{ marginTop: 12, width: '100%', padding: '10px', borderRadius: '8px', background: '#0ea5e9', color: 'white', border: 'none', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
                 <PlayCircle size={16}/> Cargar Orden
               </button>
-              <button onClick={() => eliminarTarea(t.id)} style={{ position: 'absolute', top: 10, right: 10, background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '6px', padding: '4px 10px', fontWeight: 700, cursor: 'pointer', fontSize: '0.8rem' }}>Eliminar</button>
+              {(userRol === 'farmaceutico' || userRol === 'admin') && (
+                <button onClick={() => eliminarTarea(t.id)} style={{ position: 'absolute', top: 10, right: 10, background: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '6px', padding: '4px 10px', fontWeight: 700, cursor: 'pointer', fontSize: '0.8rem' }}>Eliminar</button>
+              )}
             </div>
           ))}
           {tareasPendientes.length === 0 && <div style={{ gridColumn: '1/-1', padding: '3rem', textAlign: 'center', color: '#94a3b8', border: '2px dashed #e2e8f0', borderRadius: '15px' }}>No hay tareas programadas</div>}
